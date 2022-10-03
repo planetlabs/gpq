@@ -1,0 +1,13 @@
+{
+  "geometry": {
+    "coordinates": [
+      1,
+      2
+    ],
+    "type": "Point"
+  },
+  "type": "Feature",
+  "properties": {
+    "name": "test"
+  }
+}

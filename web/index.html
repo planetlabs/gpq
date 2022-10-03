@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Read and write GeoParquet files">
+  <title>GPQ - GeoParquet Utility</title>
+  <script type="module" src="./main.js"></script>
+  <style>
+    *,
+    *:before,
+    *:after {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 1em auto;
+      font-family: "Lucida Grande", "Lucida Sans Unicode", Arial, Verdana, sans-serif;
+      max-width: 80%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    a {
+      color: #679;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    header {
+      text-align: center;
+      margin: 1em;
+    }
+
+    footer {
+      margin: 2em;
+      color: #555555;
+      font-size: small;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>
+      GeoParquet <-> GeoJSON
+    </h1>
+    <p>
+      Convert <a href="https://geojson.org/">GeoJSON</a>
+      to <a href="https://github.com/opengeospatial/geoparquet">GeoParquet</a>
+      and vice versa without leaving your browser.
+    </p>
+  </header>
+  <gpq-converter></gpq-converter>
+</body>
+
+</html>

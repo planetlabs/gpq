@@ -1,0 +1,20 @@
+{
+  "name": "gpq",
+  "private": true,
+  "scripts": {},
+  "devDependencies": {
+    "eslint": "^8.26.0",
+    "eslint-config-tschaub": "^14.1.2",
+    "vite": "^3.2.1"
+  },
+  "eslintConfig": {
+    "extends": "tschaub",
+    "ignorePatterns": ["wasm_exec.js"],
+    "globals": {
+      "Go": "readonly"
+    },
+    "rules": {
+      "import/no-unresolved": ["error", {"ignore": ["^https?://"]}]
+    }
+  }
+}

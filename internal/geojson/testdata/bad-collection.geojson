@@ -1,0 +1,27 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0,
+          0
+        ]
+      },
+      "properties": {
+        "place": "null island"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "invalid": true
+      },
+      "properties": {
+        "place": "bad geometry"
+      }
+    }
+  ]
+}

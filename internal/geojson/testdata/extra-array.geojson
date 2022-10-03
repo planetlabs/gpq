@@ -1,0 +1,27 @@
+{
+  "geometry": {
+    "coordinates": [
+      1,
+      2
+    ],
+    "type": "Point"
+  },
+  "type": "Feature",
+  "extra": [
+    "ignore",
+    [
+      "also ignore",
+      [
+        "this too"
+      ]
+    ],
+    {
+      "complex": [
+        true
+      ]
+    }
+  ],
+  "properties": {
+    "name": "test"
+  }
+}

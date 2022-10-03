@@ -1,0 +1,16 @@
+{
+  "type": "Feature",
+  "id": {
+    "oops": true
+  },
+  "geometry": {
+    "type": "Point",
+    "coordinates": [
+      1,
+      2
+    ]
+  },
+  "properties": {
+    "name": "test"
+  }
+}
