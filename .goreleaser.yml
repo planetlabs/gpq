@@ -1,0 +1,65 @@
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - id: gpq
+    main: ./cmd/gpq/
+    binary: gpq
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    tags:
+      - noasm
+  - id: gpq-wasm
+    main: ./cmd/wasm/
+    binary: gpq
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - js
+    goarch:
+      - wasm
+    tags:
+      - noasm
+archives:
+  - name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+dockers:
+  - image_templates:
+      - "ghcr.io/planetlabs/gpq:{{ .Tag }}"
+      - "ghcr.io/planetlabs/gpq:v{{ .Major }}"
+    build_flag_templates:
+      - --label=org.opencontainers.image.licenses=MIT
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.url=https://github.com/planetlabs/{{ .ProjectName }}
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+changelog:
+  sort: asc
+  use: github-native
+brews:
+  - tap:
+      owner: planetlabs
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    url_template: "https://github.com/planetlabs/{{ .ProjectName }}/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    homepage: "https://github.com/planetlabs/gpq"
+    description: "Utility for working with GeoParquet."
+    license: "Apache-2.0"
+    test: |
+      system "#{bin}/xyz2ogc version"
