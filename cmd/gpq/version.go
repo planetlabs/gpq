@@ -14,18 +14,23 @@
 
 package main
 
-import (
-	"github.com/alecthomas/kong"
+import "fmt"
+
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
-var CLI struct {
-	Convert  ConvertCmd  `cmd:"" help:"Convert data from one format to another."`
-	Validate ValidateCmd `cmd:"" help:"Validate a GeoParquet file."`
-	Version  VersionCmd  `cmd:"" help:"Print the version of this program."`
+type VersionCmd struct {
+	Detail bool `help:"Include detail about the commit and build date."`
 }
 
-func main() {
-	ctx := kong.Parse(&CLI)
-	err := ctx.Run()
-	ctx.FatalIfErrorf(err)
+func (c *VersionCmd) Run() error {
+	output := version
+	if c.Detail {
+		output = fmt.Sprintf("%s (%s %s)", output, commit, date)
+	}
+	fmt.Println(output)
+	return nil
 }
