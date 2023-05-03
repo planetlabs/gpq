@@ -12,7 +12,7 @@ For Homebrew users, you can install `gpq` from the [Planet tap](https://github.c
 
 ```shell
 # run `brew update` first if you have used this tap previously and want the latest formula
-brew install planetlabs/tap/gqp
+brew install planetlabs/tap/gpq
 ```
 
 ## Command Line Utility
