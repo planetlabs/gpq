@@ -2,6 +2,19 @@
 
 A utility for working with [GeoParquet](https://github.com/opengeospatial/geoparquet).
 
+## Installation
+
+The `gpq` program can be installed by downloading one of the archives from [the latest release](https://github.com/planetlabs/gpq/releases).
+
+Extract the archive and place the `gpq` executable somewhere on your path.  See a list of available commands by running `gpq` in your terminal.
+
+For Homebrew users, you can install `gpq` from the [Planet tap](https://github.com/planetlabs/homebrew-tap):
+
+```shell
+# run `brew update` first if you have used this tap previously and want the latest formula
+brew install planetlabs/tap/gqp
+```
+
 ## Command Line Utility
 
 The `gpq` program can be used to validate GeoParquet files and to convert to and from GeoJSON.
