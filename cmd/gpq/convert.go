@@ -28,6 +28,8 @@ type ConvertCmd struct {
 	From   string `help:"Input file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet" default:"auto"`
 	Output string `arg:"" name:"output" help:"Output file." type:"path"`
 	To     string `help:"Output file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet" default:"auto"`
+	Min    int    `help:"Minimum number of features to consider when building a schema." default:"10"`
+	Max    int    `help:"Maximum number of features to consider when building a schema." default:"100"`
 }
 
 type FormatType string
@@ -57,7 +59,7 @@ func getFormatType(filename string) FormatType {
 	if strings.HasSuffix(filename, ".json") || strings.HasSuffix(filename, ".geojson") {
 		return GeoJSONType
 	}
-	if strings.HasSuffix(filename, ".parquet") || strings.HasSuffix(filename, ".geoparquet") {
+	if strings.HasSuffix(filename, ".pq") || strings.HasSuffix(filename, ".parquet") || strings.HasSuffix(filename, ".geoparquet") {
 		return GeoParquetType
 	}
 	return UnknownType
@@ -110,5 +112,6 @@ func (c *ConvertCmd) Run() error {
 		return geojson.FromParquet(file, output)
 	}
 
-	return geojson.ToParquet(input, output)
+	convertOptions := &geojson.ConvertOptions{MinFeatures: c.Min, MaxFeatures: c.Max}
+	return geojson.ToParquet(input, output, convertOptions)
 }

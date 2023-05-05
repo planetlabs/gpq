@@ -203,7 +203,7 @@ func TestToParquet(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer)
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
 	assert.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
@@ -240,7 +240,7 @@ func TestToParquetMismatchedTypes(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer)
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
 	assert.EqualError(t, toParquetErr, "mixed types for \"stringProperty\", expected string, but got float64")
 }
 
@@ -249,7 +249,7 @@ func TestToParquetRepeatedProps(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer)
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
@@ -274,7 +274,7 @@ func TestToParquetNullGeometry(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer)
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
@@ -299,7 +299,7 @@ func TestToParquetAllNullGeometry(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer)
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
@@ -331,7 +331,7 @@ func TestToParqueStringId(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer)
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
@@ -350,7 +350,7 @@ func TestToParqueNumberId(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer)
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
@@ -369,7 +369,7 @@ func TestToParqueBooleanId(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer)
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
 	assert.ErrorContains(t, toParquetErr, "expected id to be a string or number, got: true")
 }
 
@@ -378,7 +378,7 @@ func TestToParqueArrayId(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer)
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
 	assert.ErrorContains(t, toParquetErr, "expected id to be a string or number, got: [")
 }
 
@@ -387,7 +387,7 @@ func TestToParqueObjectId(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer)
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
 	assert.ErrorContains(t, toParquetErr, "expected id to be a string or number, got: {")
 }
 
@@ -396,7 +396,7 @@ func TestToParquetWithCRS(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer)
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
@@ -415,7 +415,7 @@ func TestToParquetExtraArray(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer)
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
@@ -446,7 +446,7 @@ func TestToParquetExtraObject(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer)
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
@@ -479,7 +479,7 @@ func TestRoundTripRepeatedProps(t *testing.T) {
 	inputReader := bytes.NewReader(inputData)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(inputReader, parquetBuffer)
+	toParquetErr := geojson.ToParquet(inputReader, parquetBuffer, nil)
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
@@ -500,7 +500,7 @@ func TestRoundTripNestedProps(t *testing.T) {
 	inputReader := bytes.NewReader(inputData)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(inputReader, parquetBuffer)
+	toParquetErr := geojson.ToParquet(inputReader, parquetBuffer, nil)
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
@@ -521,7 +521,28 @@ func TestRoundTripNullGeometry(t *testing.T) {
 	inputReader := bytes.NewReader(inputData)
 
 	parquetBuffer := &bytes.Buffer{}
-	toParquetErr := geojson.ToParquet(inputReader, parquetBuffer)
+	toParquetErr := geojson.ToParquet(inputReader, parquetBuffer, nil)
+	require.NoError(t, toParquetErr)
+
+	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
+	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
+	require.NoError(t, openErr)
+
+	jsonBuffer := &bytes.Buffer{}
+	convertErr := geojson.FromParquet(parquetFile, jsonBuffer)
+	require.NoError(t, convertErr)
+
+	assert.JSONEq(t, string(inputData), jsonBuffer.String())
+}
+
+func TestRoundTripSparseProperties(t *testing.T) {
+	inputPath := "testdata/sparse-properties.geojson"
+	inputData, readErr := os.ReadFile(inputPath)
+	require.NoError(t, readErr)
+	inputReader := bytes.NewReader(inputData)
+
+	parquetBuffer := &bytes.Buffer{}
+	toParquetErr := geojson.ToParquet(inputReader, parquetBuffer, nil)
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())

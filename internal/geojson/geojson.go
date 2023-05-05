@@ -230,25 +230,26 @@ func NewFeatureReader(input io.Reader) *FeatureReader {
 	}
 }
 
-func (reader *FeatureReader) Converter(max int) (*TypeConverter, error) {
+func (reader *FeatureReader) Converter(min int, max int) (*TypeConverter, error) {
 	features := []*Feature{}
+	schemaBuilder := &SchemaBuilder{}
 	for attempts := 0; attempts < max-1; attempts += 1 {
 		feature, readErr := reader.Next()
 		if readErr == io.EOF {
 			if attempts == 0 {
 				return nil, errors.New("empty feature collection")
 			}
-			return nil, fmt.Errorf("failed to generate schema from first %d features", attempts)
+			reader.buffer = features
+			return schemaBuilder.Converter()
 		}
 		if readErr != nil {
 			return nil, readErr
 		}
 		features = append(features, feature)
 
-		converter, converterErr := ConverterFromFeature(feature)
-		if converterErr == nil {
+		if complete := schemaBuilder.Add(feature); complete && attempts >= min-1 {
 			reader.buffer = features
-			return converter, nil
+			return schemaBuilder.Converter()
 		}
 	}
 	return nil, fmt.Errorf("failed to generate converter from first %d features", max)
@@ -511,11 +512,23 @@ func (r *FeatureReader) readGeometryCollection() (*Feature, error) {
 	return feature, nil
 }
 
-func ToParquet(input io.Reader, output io.Writer) error {
+type ConvertOptions struct {
+	MinFeatures int
+	MaxFeatures int
+}
+
+var defaultOptions = &ConvertOptions{
+	MinFeatures: 1,
+	MaxFeatures: 50,
+}
+
+func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions) error {
 	reader := NewFeatureReader(input)
 
-	max := 50
-	converter, converterErr := reader.Converter(max)
+	if convertOptions == nil {
+		convertOptions = defaultOptions
+	}
+	converter, converterErr := reader.Converter(convertOptions.MinFeatures, convertOptions.MaxFeatures)
 	if converterErr != nil {
 		return converterErr
 	}
