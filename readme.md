@@ -48,6 +48,15 @@ gpq convert example.geojson example.parquet
 gpq convert example.parquet example.geojson
 ```
 
+### describe
+
+The `describe` command prints schema information and metadata about a GeoParquet file.
+
+```shell
+# use the `--pretty` argument to format the JSON output
+gpq describe example.parquet
+```
+
 ## Limitations
 
  * Non-geographic CRS information is not preserved when converting GeoParquet to GeoJSON.
