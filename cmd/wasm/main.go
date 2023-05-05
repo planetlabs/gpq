@@ -87,7 +87,7 @@ var toParquet = js.FuncOf(func(this js.Value, args []js.Value) any {
 
 	input := strings.NewReader(args[0].String())
 	output := &bytes.Buffer{}
-	convertErr := geojson.ToParquet(input, output)
+	convertErr := geojson.ToParquet(input, output, &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 250})
 
 	if convertErr != nil {
 		return returnFromError(convertErr)

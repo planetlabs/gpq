@@ -37,7 +37,7 @@ type TypeConverter struct {
 	Convert ConvertFn
 }
 
-func converterFromAny(v any) (*TypeConverter, error) {
+func typeConverterFromAny(v any) (*TypeConverter, error) {
 	if v == nil {
 		return nil, errors.New("cannot determine type from null")
 	}
@@ -50,20 +50,20 @@ func converterFromAny(v any) (*TypeConverter, error) {
 		}
 		return converter, nil
 	case map[string]any:
-		return converterFromMap(value)
+		return typeConverterFromMap(value)
 	case []any:
-		return converterFromSlice(value)
+		return typeConverterFromSlice(value)
 	default:
 		return nil, fmt.Errorf("unsupported type: %t", value)
 	}
 }
 
-func converterFromSlice(data []any) (*TypeConverter, error) {
+func typeConverterFromSlice(data []any) (*TypeConverter, error) {
 	if len(data) == 0 {
 		return nil, errors.New("cannot determine type from empty array")
 	}
 
-	itemConverter, err := converterFromAny(data[0])
+	itemConverter, err := typeConverterFromAny(data[0])
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func converterFromSlice(data []any) (*TypeConverter, error) {
 				if itemValue.Type() != itemType {
 					return nil, fmt.Errorf("mixed array, expected %s, but got %s", itemType, itemValue.Type())
 				}
-				slice.Index(i).Set(reflect.ValueOf(value))
+				slice.Index(i).Set(itemValue)
 			}
 			return slice.Interface(), nil
 		},
@@ -108,7 +108,7 @@ type FieldConverter struct {
 	Convert ConvertFn
 }
 
-func converterFromMap(data map[string]any) (*TypeConverter, error) {
+func typeConverterFromMap(data map[string]any) (*TypeConverter, error) {
 	fieldConverters, err := fieldConvertersFromMap(data)
 	if err != nil {
 		return nil, err
@@ -179,28 +179,38 @@ func fieldName(key string, offset int) string {
 	return fmt.Sprintf("%s_%d", string(letters), offset)
 }
 
+func fieldConverterFromAny(key string, offset int, value any) (*FieldConverter, error) {
+	typeConverter, err := typeConverterFromAny(value)
+	if err != nil {
+		return nil, err
+	}
+
+	repetition := "optional"
+	if typeConverter.Type.Kind() == reflect.Slice {
+		repetition = ""
+	}
+
+	fieldConverter := &FieldConverter{
+		Field: reflect.StructField{
+			Name: fieldName(key, offset),
+			Type: typeConverter.Type,
+			Tag:  makeStructTag("parquet", key, repetition),
+		},
+		Convert: typeConverter.Convert,
+	}
+
+	return fieldConverter, nil
+}
+
 func fieldConvertersFromMap(data map[string]any) (map[string]*FieldConverter, error) {
 	fieldConverters := map[string]*FieldConverter{}
 	for key, v := range data {
-		converter, err := converterFromAny(v)
+		fieldConverter, err := fieldConverterFromAny(key, len(fieldConverters), v)
 		if err != nil {
 			return nil, err
 		}
 
-		repetition := "optional"
-		if converter.Type.Kind() == reflect.Slice {
-			repetition = ""
-		}
-
-		field := reflect.StructField{
-			Name: fieldName(key, len(fieldConverters)),
-			Type: converter.Type,
-			Tag:  makeStructTag("parquet", key, repetition),
-		}
-		fieldConverters[key] = &FieldConverter{
-			Field:   field,
-			Convert: converter.Convert,
-		}
+		fieldConverters[key] = fieldConverter
 	}
 	return fieldConverters, nil
 }
@@ -216,24 +226,75 @@ func makeStructTag(name string, values ...string) reflect.StructTag {
 	return reflect.StructTag(fmt.Sprintf("%s:%q", name, strings.Join(nonEmptyValues, ",")))
 }
 
-func ConverterFromFeature(feature *Feature) (*TypeConverter, error) {
-	fieldConverters, fieldErr := fieldConvertersFromMap(feature.Properties)
-	if fieldErr != nil {
-		return nil, fieldErr
+type SchemaBuilder struct {
+	fieldConverters map[string]*FieldConverter
+	lastError       error
+}
+
+func (sb *SchemaBuilder) Error() error {
+	return sb.lastError
+}
+
+func (sb *SchemaBuilder) isComplete() bool {
+	if sb.fieldConverters == nil {
+		return false
+	}
+	for _, v := range sb.fieldConverters {
+		if v == nil {
+			return false
+		}
+	}
+	return true
+}
+
+func (sb *SchemaBuilder) Add(feature *Feature) bool {
+	if sb.fieldConverters == nil {
+		sb.fieldConverters = map[string]*FieldConverter{}
+	}
+
+	fieldConverters := sb.fieldConverters
+	for key, value := range feature.Properties {
+		if value == nil {
+			if _, ok := fieldConverters[key]; !ok {
+				if sb.lastError == nil {
+					sb.lastError = fmt.Errorf("null value for %q", key)
+				}
+				fieldConverters[key] = nil
+			}
+			continue
+		}
+
+		if fieldConverters[key] != nil {
+			continue
+		}
+
+		fieldConverter, err := fieldConverterFromAny(key, len(fieldConverters), value)
+		if err != nil {
+			sb.lastError = err
+			fieldConverters[key] = nil
+			continue
+		}
+
+		fieldConverters[key] = fieldConverter
+	}
+
+	if fieldConverters[primaryColumn] != nil {
+		return sb.isComplete()
 	}
 
 	geometryData, wkbErr := wkb.Marshal(feature.Geometry)
 	if wkbErr != nil {
-		return nil, fmt.Errorf("failed to encode geometry: %w", wkbErr)
+		fieldConverters[primaryColumn] = nil
+		sb.lastError = fmt.Errorf("failed to encode geometry: %w", wkbErr)
+		return false
 	}
 
-	geometryField := reflect.StructField{
-		Name: fieldName(primaryColumn, len(fieldConverters)),
-		Type: reflect.TypeOf(geometryData),
-		Tag:  makeStructTag("parquet", primaryColumn, "optional"),
-	}
 	fieldConverters[primaryColumn] = &FieldConverter{
-		Field: geometryField,
+		Field: reflect.StructField{
+			Name: fieldName(primaryColumn, len(fieldConverters)),
+			Type: reflect.TypeOf(geometryData),
+			Tag:  makeStructTag("parquet", primaryColumn, "optional"),
+		},
 		Convert: func(v any) (any, error) {
 			geometry, ok := v.(orb.Geometry)
 			if !ok {
@@ -243,7 +304,19 @@ func ConverterFromFeature(feature *Feature) (*TypeConverter, error) {
 		},
 	}
 
-	converter, converterErr := structConverter(fieldConverters)
+	return sb.isComplete()
+}
+
+func (sb *SchemaBuilder) Converter() (*TypeConverter, error) {
+	if !sb.isComplete() {
+		if err := sb.Error(); err != nil {
+			return nil, err
+		}
+
+		return nil, errors.New("not enough features have been added to build a schema")
+	}
+
+	converter, converterErr := structConverter(sb.fieldConverters)
 	if converterErr != nil {
 		return nil, converterErr
 	}
@@ -266,12 +339,18 @@ func ConverterFromFeature(feature *Feature) (*TypeConverter, error) {
 	return featureConverter, nil
 }
 
-func SchemaOf(feature *Feature) (*parquet.Schema, error) {
-	converter, err := ConverterFromFeature(feature)
+func (sb *SchemaBuilder) Schema() (*parquet.Schema, error) {
+	converter, err := sb.Converter()
 	if err != nil {
 		return nil, err
 	}
 
 	schema := parquet.SchemaOf(reflect.New(converter.Type).Elem().Interface())
 	return schema, nil
+}
+
+func SchemaOf(feature *Feature) (*parquet.Schema, error) {
+	schemaBuilder := &SchemaBuilder{}
+	schemaBuilder.Add(feature)
+	return schemaBuilder.Schema()
 }

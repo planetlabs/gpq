@@ -1,0 +1,32 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "first": "one",
+        "second": null,
+        "third": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "first": null,
+        "second": "two",
+        "third": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "first": null,
+        "second": null,
+        "third": "three"
+      }
+    }
+  ]
+}

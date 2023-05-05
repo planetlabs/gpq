@@ -106,6 +106,12 @@ func TestSchemaOfArrayOfNumbers(t *testing.T) {
 	assert.Equal(t, parquet.DoubleType, column.Node.Type())
 }
 
+func converterFromFeature(feature *geojson.Feature) (*geojson.TypeConverter, error) {
+	schemaBuilder := &geojson.SchemaBuilder{}
+	schemaBuilder.Add(feature)
+	return schemaBuilder.Converter()
+}
+
 func TestConverterSliceOfFloat(t *testing.T) {
 	path := "test"
 
@@ -116,7 +122,7 @@ func TestConverterSliceOfFloat(t *testing.T) {
 		},
 	}
 
-	converter, converterErr := geojson.ConverterFromFeature(feature)
+	converter, converterErr := converterFromFeature(feature)
 	require.NoError(t, converterErr)
 
 	_, convertErr := converter.Convert(feature)
@@ -133,7 +139,7 @@ func TestConverterSliceOfString(t *testing.T) {
 		},
 	}
 
-	converter, converterErr := geojson.ConverterFromFeature(feature)
+	converter, converterErr := converterFromFeature(feature)
 	require.NoError(t, converterErr)
 
 	_, convertErr := converter.Convert(feature)
@@ -150,7 +156,7 @@ func TestConverterSliceOfMixed(t *testing.T) {
 		},
 	}
 
-	converter, converterErr := geojson.ConverterFromFeature(feature)
+	converter, converterErr := converterFromFeature(feature)
 	require.NoError(t, converterErr)
 
 	mixed := &geojson.Feature{
@@ -174,7 +180,7 @@ func TestConverterNilGeometry(t *testing.T) {
 		},
 	}
 
-	converter, converterErr := geojson.ConverterFromFeature(feature)
+	converter, converterErr := converterFromFeature(feature)
 	require.NoError(t, converterErr)
 
 	null := &geojson.Feature{
@@ -196,7 +202,7 @@ func TestConverterNilSlice(t *testing.T) {
 		},
 	}
 
-	converter, converterErr := geojson.ConverterFromFeature(feature)
+	converter, converterErr := converterFromFeature(feature)
 	require.NoError(t, converterErr)
 
 	null := &geojson.Feature{
@@ -205,4 +211,140 @@ func TestConverterNilSlice(t *testing.T) {
 
 	_, convertErr := converter.Convert(null)
 	assert.NoError(t, convertErr)
+}
+
+func TestSchemaBuilder(t *testing.T) {
+	prop1 := "test-property-1"
+	prop2 := "test-property-2"
+
+	features := []*geojson.Feature{
+		{
+			Properties: map[string]any{
+				prop1: "test-value-1",
+				prop2: "test-value-2",
+			},
+		},
+	}
+
+	schemaBuilder := &geojson.SchemaBuilder{}
+	complete := schemaBuilder.Add(features[0])
+	assert.True(t, complete)
+
+	schema, schemaErr := schemaBuilder.Schema()
+	require.NoError(t, schemaErr)
+
+	require.NoError(t, schemaErr)
+	require.Len(t, schema.Fields(), 3)
+
+	col1, ok := schema.Lookup(prop1)
+	require.True(t, ok)
+	assert.True(t, col1.Node.Optional())
+	assert.Equal(t, parquet.String().Type(), col1.Node.Type())
+
+	col2, ok := schema.Lookup(prop2)
+	require.True(t, ok)
+	assert.True(t, col2.Node.Optional())
+	assert.Equal(t, parquet.String().Type(), col2.Node.Type())
+
+	geom, ok := schema.Lookup("geometry")
+	require.True(t, ok)
+	assert.True(t, geom.Node.Optional())
+	assert.Equal(t, parquet.ByteArrayType, geom.Node.Type())
+}
+
+func TestSchemaBuilderSparse(t *testing.T) {
+	prop1 := "test-property-1"
+	prop2 := "test-property-2"
+
+	features := []*geojson.Feature{
+		{
+			Properties: map[string]any{
+				prop1: "test-value-1",
+			},
+		},
+		{
+			Properties: map[string]any{
+				prop2: "test-value-2",
+			},
+		},
+	}
+
+	schemaBuilder := &geojson.SchemaBuilder{}
+
+	assert.True(t, schemaBuilder.Add(features[0]))
+	assert.True(t, schemaBuilder.Add(features[1]))
+
+	schema, schemaErr := schemaBuilder.Schema()
+	require.NoError(t, schemaErr)
+
+	require.NoError(t, schemaErr)
+	require.Len(t, schema.Fields(), 3)
+
+	col1, ok := schema.Lookup(prop1)
+	require.True(t, ok)
+	assert.True(t, col1.Node.Optional())
+	assert.Equal(t, parquet.String().Type(), col1.Node.Type())
+
+	col2, ok := schema.Lookup(prop2)
+	require.True(t, ok)
+	assert.True(t, col2.Node.Optional())
+	assert.Equal(t, parquet.String().Type(), col2.Node.Type())
+
+	geom, ok := schema.Lookup("geometry")
+	require.True(t, ok)
+	assert.True(t, geom.Node.Optional())
+	assert.Equal(t, parquet.ByteArrayType, geom.Node.Type())
+}
+
+func TestSchemaBuilderSparseNulls(t *testing.T) {
+	prop1 := "test-property-1"
+	prop2 := "test-property-2"
+
+	features := []*geojson.Feature{
+		{
+			Properties: map[string]any{
+				prop1: "test-value-1",
+				prop2: nil,
+			},
+		},
+		{
+			Properties: map[string]any{
+				prop1: nil,
+				prop2: nil,
+			},
+		},
+		{
+			Properties: map[string]any{
+				prop1: nil,
+				prop2: "test-value-2",
+			},
+		},
+	}
+
+	schemaBuilder := &geojson.SchemaBuilder{}
+
+	assert.False(t, schemaBuilder.Add(features[0]))
+	assert.False(t, schemaBuilder.Add(features[1]))
+	assert.True(t, schemaBuilder.Add(features[2]))
+
+	schema, schemaErr := schemaBuilder.Schema()
+	require.NoError(t, schemaErr)
+
+	require.NoError(t, schemaErr)
+	require.Len(t, schema.Fields(), 3)
+
+	col1, ok := schema.Lookup(prop1)
+	require.True(t, ok)
+	assert.True(t, col1.Node.Optional())
+	assert.Equal(t, parquet.String().Type(), col1.Node.Type())
+
+	col2, ok := schema.Lookup(prop2)
+	require.True(t, ok)
+	assert.True(t, col2.Node.Optional())
+	assert.Equal(t, parquet.String().Type(), col2.Node.Type())
+
+	geom, ok := schema.Lookup("geometry")
+	require.True(t, ok)
+	assert.True(t, geom.Node.Optional())
+	assert.Equal(t, parquet.ByteArrayType, geom.Node.Type())
 }
