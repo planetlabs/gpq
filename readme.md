@@ -15,6 +15,12 @@ For Homebrew users, you can install `gpq` from the [Planet tap](https://github.c
 brew install planetlabs/tap/gpq
 ```
 
+## WebAssembly
+
+In addition to the CLI program, the `gpq` utility is built as a WebAssembly binary.  The WASM build can be downloaded from [the latest release](https://github.com/planetlabs/gpq/releases).
+
+To give it a try without downloading or installing anything, see https://planetlabs.github.io/gpq/.
+
 ## Command Line Utility
 
 The `gpq` program can be used to validate GeoParquet files and to convert to and from GeoJSON.
