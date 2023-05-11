@@ -45,14 +45,14 @@ func (c *DescribeCmd) Run() error {
 		return fileErr
 	}
 
-	geoMetadata, geoErr := geoparquet.GetGeoMetadata(file)
+	metadata, geoErr := geoparquet.GetMetadata(file)
 	if geoErr != nil {
 		return geoErr
 	}
 
 	info := &Info{
 		Schema:   buildSchema("", file.Schema()),
-		Metadata: geoMetadata,
+		Metadata: metadata,
 	}
 
 	encoder := json.NewEncoder(os.Stdout)
@@ -68,8 +68,8 @@ func (c *DescribeCmd) Run() error {
 }
 
 type Info struct {
-	Schema   *Schema                 `json:"schema"`
-	Metadata *geoparquet.GeoMetadata `json:"metadata"`
+	Schema   *Schema              `json:"schema"`
+	Metadata *geoparquet.Metadata `json:"metadata"`
 }
 
 type Schema struct {

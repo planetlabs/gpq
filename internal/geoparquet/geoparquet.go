@@ -22,11 +22,15 @@ import (
 	"github.com/segmentio/parquet-go"
 )
 
-const GeoMetadataKey = "geo"
+const (
+	Version               = "1.0.0-beta.1"
+	MetadataKey           = "geo"
+	EncodingWKB           = "WKB"
+	EncodingWKT           = "WKT"
+	defaultGeometryColumn = "geometry"
+)
 
-const Version = "1.0.0-beta.1"
-
-type GeoMetadata struct {
+type Metadata struct {
 	Version       string                     `json:"version"`
 	PrimaryColumn string                     `json:"primary_column"`
 	Columns       map[string]*GeometryColumn `json:"columns"`
@@ -77,20 +81,35 @@ func (col *GeometryColumn) GetGeometryTypes() []string {
 	return types
 }
 
-func GetGeoMetadataValue(file *parquet.File) (string, error) {
-	value, ok := file.Lookup(GeoMetadataKey)
+func DefaultMetadata() *Metadata {
+	return &Metadata{
+		Version:       Version,
+		PrimaryColumn: defaultGeometryColumn,
+		Columns: map[string]*GeometryColumn{
+			defaultGeometryColumn: {
+				Encoding:      EncodingWKB,
+				GeometryTypes: []string{},
+			},
+		},
+	}
+}
+
+var ErrNoMetadata = fmt.Errorf("missing %s metadata key", MetadataKey)
+
+func GetMetadataValue(file *parquet.File) (string, error) {
+	value, ok := file.Lookup(MetadataKey)
 	if !ok {
-		return "", fmt.Errorf("missing %s metadata key", GeoMetadataKey)
+		return "", ErrNoMetadata
 	}
 	return value, nil
 }
 
-func GetGeoMetadata(file *parquet.File) (*GeoMetadata, error) {
-	value, valueErr := GetGeoMetadataValue(file)
+func GetMetadata(file *parquet.File) (*Metadata, error) {
+	value, valueErr := GetMetadataValue(file)
 	if valueErr != nil {
 		return nil, valueErr
 	}
-	geoFileMetadata := &GeoMetadata{}
+	geoFileMetadata := &Metadata{}
 	jsonErr := json.Unmarshal([]byte(value), geoFileMetadata)
 	if jsonErr != nil {
 		return nil, fmt.Errorf("unable to parse geo metadata: %w", jsonErr)

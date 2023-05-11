@@ -20,8 +20,8 @@ import (
 
 const primaryColumn = "geometry"
 
-func GetDefaultMetadata() *geoparquet.GeoMetadata {
-	return &geoparquet.GeoMetadata{
+func GetDefaultMetadata() *geoparquet.Metadata {
+	return &geoparquet.Metadata{
 		Version:       geoparquet.Version,
 		PrimaryColumn: primaryColumn,
 		Columns: map[string]*geoparquet.GeometryColumn{
