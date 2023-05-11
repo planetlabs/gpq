@@ -67,11 +67,11 @@ var fromParquet = js.FuncOf(func(this js.Value, args []js.Value) any {
 		return returnFromError(convertErr)
 	}
 
-	geoMetadata, _ := input.Lookup("geo")
+	metadata, _ := input.Lookup("geo")
 
 	return returnFromValue(map[string]any{
 		"data":    output.String(),
-		"geo":     geoMetadata,
+		"geo":     metadata,
 		"schema":  input.Schema().String(),
 		"records": input.NumRows(),
 	})
@@ -98,14 +98,14 @@ var toParquet = js.FuncOf(func(this js.Value, args []js.Value) any {
 		return returnFromError(err)
 	}
 
-	geoMetadata, _ := file.Lookup("geo")
+	metadata, _ := file.Lookup("geo")
 
 	array := uint8ArrayConstructor.New(output.Len())
 	js.CopyBytesToJS(array, output.Bytes())
 
 	return returnFromValue(map[string]any{
 		"data":    array,
-		"geo":     geoMetadata,
+		"geo":     metadata,
 		"schema":  file.Schema().String(),
 		"records": file.NumRows(),
 	})

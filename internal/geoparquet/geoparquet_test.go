@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetGeoMetadataV040(t *testing.T) {
+func TestGetMetadataV040(t *testing.T) {
 	fixturePath := "../testdata/cases/example-v0.4.0.parquet"
 	info, statErr := os.Stat(fixturePath)
 	require.NoError(t, statErr)
@@ -36,21 +36,21 @@ func TestGetGeoMetadataV040(t *testing.T) {
 	file, fileErr := parquet.OpenFile(input, info.Size())
 	require.NoError(t, fileErr)
 
-	geoMetadata, geoErr := geoparquet.GetGeoMetadata(file)
+	metadata, geoErr := geoparquet.GetMetadata(file)
 	require.NoError(t, geoErr)
 
-	assert.Equal(t, "geometry", geoMetadata.PrimaryColumn)
-	assert.Equal(t, "0.4.0", geoMetadata.Version)
-	require.Len(t, geoMetadata.Columns, 1)
+	assert.Equal(t, "geometry", metadata.PrimaryColumn)
+	assert.Equal(t, "0.4.0", metadata.Version)
+	require.Len(t, metadata.Columns, 1)
 
-	col := geoMetadata.Columns[geoMetadata.PrimaryColumn]
+	col := metadata.Columns[metadata.PrimaryColumn]
 	assert.Equal(t, "WKB", col.Encoding)
 	assert.Equal(t, "planar", col.Edges)
 	assert.Equal(t, []float64{-180, -90, 180, 83.6451}, col.Bounds)
 	assert.Equal(t, []string{"Polygon", "MultiPolygon"}, col.GetGeometryTypes())
 }
 
-func TestGetGeoMetadataV100Beta1(t *testing.T) {
+func TestGetMetadataV100Beta1(t *testing.T) {
 	fixturePath := "../testdata/cases/example-v1.0.0-beta.1.parquet"
 	info, statErr := os.Stat(fixturePath)
 	require.NoError(t, statErr)
@@ -61,14 +61,14 @@ func TestGetGeoMetadataV100Beta1(t *testing.T) {
 	file, fileErr := parquet.OpenFile(input, info.Size())
 	require.NoError(t, fileErr)
 
-	geoMetadata, geoErr := geoparquet.GetGeoMetadata(file)
+	metadata, geoErr := geoparquet.GetMetadata(file)
 	require.NoError(t, geoErr)
 
-	assert.Equal(t, "geometry", geoMetadata.PrimaryColumn)
-	assert.Equal(t, "1.0.0-beta.1", geoMetadata.Version)
-	require.Len(t, geoMetadata.Columns, 1)
+	assert.Equal(t, "geometry", metadata.PrimaryColumn)
+	assert.Equal(t, "1.0.0-beta.1", metadata.Version)
+	require.Len(t, metadata.Columns, 1)
 
-	col := geoMetadata.Columns[geoMetadata.PrimaryColumn]
+	col := metadata.Columns[metadata.PrimaryColumn]
 	assert.Equal(t, "WKB", col.Encoding)
 	assert.Equal(t, "planar", col.Edges)
 	assert.Equal(t, []float64{-180, -90, 180, 83.6451}, col.Bounds)

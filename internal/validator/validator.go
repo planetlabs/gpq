@@ -80,7 +80,7 @@ func (v *Validator) Validate(ctx context.Context, resource string) error {
 		return fileErr
 	}
 
-	value, geoErr := geoparquet.GetGeoMetadataValue(file)
+	value, geoErr := geoparquet.GetMetadataValue(file)
 	if geoErr != nil {
 		return geoErr
 	}
