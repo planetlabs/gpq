@@ -24,12 +24,13 @@ import (
 )
 
 type ConvertCmd struct {
-	Input  string `arg:"" name:"input" help:"Input file." type:"existingfile"`
-	From   string `help:"Input file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet" default:"auto"`
-	Output string `arg:"" name:"output" help:"Output file." type:"path"`
-	To     string `help:"Output file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet" default:"auto"`
-	Min    int    `help:"Minimum number of features to consider when building a schema." default:"10"`
-	Max    int    `help:"Maximum number of features to consider when building a schema." default:"100"`
+	Input       string `arg:"" name:"input" help:"Input file." type:"existingfile"`
+	From        string `help:"Input file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet" default:"auto"`
+	Output      string `arg:"" name:"output" help:"Output file." type:"path"`
+	To          string `help:"Output file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet" default:"auto"`
+	Min         int    `help:"Minimum number of features to consider when building a schema." default:"10"`
+	Max         int    `help:"Maximum number of features to consider when building a schema." default:"100"`
+	Compression string `enum:"uncompressed,snappy,gzip,brotli,zstd,lz4raw" help:"Parquet compression to use" default:"zstd"`
 }
 
 type FormatType string
@@ -112,6 +113,6 @@ func (c *ConvertCmd) Run() error {
 		return geojson.FromParquet(file, output)
 	}
 
-	convertOptions := &geojson.ConvertOptions{MinFeatures: c.Min, MaxFeatures: c.Max}
+	convertOptions := &geojson.ConvertOptions{MinFeatures: c.Min, MaxFeatures: c.Max, Compression: c.Compression}
 	return geojson.ToParquet(input, output, convertOptions)
 }
