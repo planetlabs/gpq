@@ -19,91 +19,285 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/planetlabs/gpq/internal/geoparquet"
-	"github.com/santhosh-tekuri/jsonschema/v5"
 	_ "github.com/santhosh-tekuri/jsonschema/v5/httploader"
 	"github.com/segmentio/parquet-go"
 )
 
 type Validator struct {
-	compiler  *jsonschema.Compiler
-	schemaMap map[string]string
+	rules        []Rule
+	metadataOnly bool
 }
 
-// Options for the Validator.
-type Options struct {
-	// A lookup of substitute schema locations.  The key is the original schema location
-	// and the value is the substitute location.
-	SchemaMap map[string]string
-}
-
-func (v *Validator) apply(options *Options) {
-	if options.SchemaMap != nil {
-		v.schemaMap = options.SchemaMap
+func MetadataOnlyRules() []Rule {
+	return []Rule{
+		RequiredGeoKey(),
+		RequiredMetadataType(),
+		RequiredVersion(),
+		RequiredPrimaryColumn(),
+		RequiredColumns(),
+		PrimaryColumnInLookup(),
+		RequiredColumnEncoding(),
+		RequiredGeometryTypes(),
+		OptionalCRS(),
+		OptionalOrientation(),
+		OptionalEdges(),
+		OptionalBbox(),
+		OptionalEpoch(),
+		GeometryDataType(),
+		GeometryUngrouped(),
+		GeometryRepetition(),
 	}
 }
 
-func schemaUrl(version string) string {
-	return fmt.Sprintf("https://geoparquet.org/releases/v%s/schema.json", version)
+func DataScanningRules() []Rule {
+	return []Rule{
+		GeometryEncoding(),
+		GeometryTypes(),
+		GeometryOrientation(),
+		GeometryBounds(),
+	}
 }
 
 // New creates a new Validator.
-func New(options ...*Options) *Validator {
-	v := &Validator{
-		compiler: jsonschema.NewCompiler(),
+func New(metadataOnly bool) *Validator {
+	rules := MetadataOnlyRules()
+	if !metadataOnly {
+		rules = append(rules, DataScanningRules()...)
 	}
-	for _, opt := range options {
-		v.apply(opt)
+
+	v := &Validator{
+		rules:        rules,
+		metadataOnly: metadataOnly,
 	}
 
 	return v
 }
 
-// Validate validates a GeoParquet file.
-func (v *Validator) Validate(ctx context.Context, resource string) error {
+type Report struct {
+	Checks       []*Check `json:"checks"`
+	MetadataOnly bool     `json:"metadataOnly"`
+}
 
+type Check struct {
+	Title   string `json:"title"`
+	Run     bool   `json:"run"`
+	Passed  bool   `json:"passed"`
+	Message string `json:"message,omitempty"`
+}
+
+// Validate opens and validates a GeoParquet file.
+func (v *Validator) Validate(ctx context.Context, resource string) (*Report, error) {
 	stat, statError := os.Stat(resource)
 	if statError != nil {
-		return fmt.Errorf("failed to get size of %q: %w", resource, statError)
+		return nil, fmt.Errorf("failed to get size of %q: %w", resource, statError)
 	}
 
 	input, readErr := os.Open(resource)
 	if readErr != nil {
-		return fmt.Errorf("failed to read from %q: %w", resource, readErr)
+		return nil, fmt.Errorf("failed to read from %q: %w", resource, readErr)
 	}
 	defer input.Close()
 
 	file, fileErr := parquet.OpenFile(input, stat.Size())
 	if fileErr != nil {
-		return fileErr
+		return nil, fileErr
 	}
 
-	value, geoErr := geoparquet.GetMetadataValue(file)
-	if geoErr != nil {
-		return geoErr
+	return v.Report(ctx, file)
+}
+
+// Report generates a validation report for a GeoParquet file.
+func (v *Validator) Report(ctx context.Context, file *parquet.File) (*Report, error) {
+	checks := make([]*Check, len(v.rules))
+	for i, rule := range v.rules {
+		checks[i] = &Check{
+			Title: rule.Title(),
+		}
 	}
 
-	geoFileMetadata := map[string]any{}
-	jsonErr := json.Unmarshal([]byte(value), &geoFileMetadata)
-	if jsonErr != nil {
-		return fmt.Errorf("failed to parse geo metadata: %w", jsonErr)
+	report := &Report{Checks: checks, MetadataOnly: v.metadataOnly}
+
+	// run all file rules
+	if err := run(v, checks, file); err != nil {
+		return report, nil
 	}
 
-	versionData, ok := geoFileMetadata["version"]
+	// run all metadata rules
+	metadataValue, metadataErr := geoparquet.GetMetadataValue(file)
+	if metadataErr != nil {
+		return nil, metadataErr
+	}
+
+	metadataMap := MetadataMap{}
+	if err := json.Unmarshal([]byte(metadataValue), &metadataMap); err != nil {
+		return nil, fmt.Errorf("failed to decode metadata: %w", err)
+	}
+
+	if err := run(v, checks, metadataMap); err != nil {
+		return report, nil
+	}
+
+	// run all column metadata rules
+	columnMetadataMap := ColumnMetdataMap{}
+	columnMetadataAny, ok := metadataMap["columns"].(map[string]any)
 	if !ok {
-		return errors.New("missing version in geo metadata")
-	}
-	version, ok := versionData.(string)
-	if !ok {
-		return fmt.Errorf("expected version to be a string, got %v", versionData)
+		return nil, errors.New("columns metadata is not an object")
 	}
 
-	schema, schemaErr := v.compiler.Compile(schemaUrl(version))
-	if schemaErr != nil {
-		return fmt.Errorf("failed to compile schema: %w", schemaErr)
+	for k, v := range columnMetadataAny {
+		col, ok := v.(map[string]any)
+		if !ok {
+			return nil, errors.New("column metadata is not an object")
+		}
+		columnMetadataMap[k] = col
 	}
 
-	return schema.Validate(geoFileMetadata)
+	if err := run(v, checks, columnMetadataMap); err != nil {
+		return report, nil
+	}
+
+	// run all rules that need the file and parsed metadata
+	metadata, err := geoparquet.GetMetadata(file)
+	if err != nil {
+		return nil, err
+	}
+
+	info := &FileInfo{Metadata: metadata, File: file}
+	if err := run(v, checks, info); err != nil {
+		return report, nil
+	}
+
+	if v.metadataOnly {
+		return report, nil
+	}
+
+	// run all the data scanning rules
+	rowReader := geoparquet.NewRowReader(file)
+
+	encodedGeometryRules := []*RowRule[EncodedGeometryMap]{}
+	encodedGeometryChecks := []*Check{}
+	for i, r := range v.rules {
+		rule, ok := r.(*RowRule[EncodedGeometryMap])
+		if ok {
+			rule.Init(info)
+			encodedGeometryRules = append(encodedGeometryRules, rule)
+			encodedGeometryChecks = append(encodedGeometryChecks, checks[i])
+		}
+	}
+
+	decodedGeometryRules := []*RowRule[DecodedGeometryMap]{}
+	decodedGeometryChecks := []*Check{}
+	for i, r := range v.rules {
+		rule, ok := r.(*RowRule[DecodedGeometryMap])
+		if ok {
+			rule.Init(info)
+			decodedGeometryRules = append(decodedGeometryRules, rule)
+			decodedGeometryChecks = append(decodedGeometryChecks, checks[i])
+		}
+	}
+
+	schema := file.Schema()
+	for {
+		row, readErr := rowReader.Next()
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return nil, fmt.Errorf("failed to read row: %w", readErr)
+		}
+
+		properties := map[string]any{}
+		if err := schema.Reconstruct(&properties, row); err != nil {
+			return nil, fmt.Errorf("failed to reconstruct row: %w", err)
+		}
+
+		encodedGeometryMap := EncodedGeometryMap{}
+		for name := range metadata.Columns {
+			value, ok := properties[name]
+			if !ok {
+				return nil, fmt.Errorf("missing column %q", name)
+			}
+			encodedGeometryMap[name] = value
+		}
+
+		for i, rule := range encodedGeometryRules {
+			check := encodedGeometryChecks[i]
+			if err := rule.Row(encodedGeometryMap); errors.Is(err, ErrFatal) {
+				check.Message = err.Error()
+				check.Run = true
+				return report, nil
+			}
+		}
+
+		decodedGeometryMap := DecodedGeometryMap{}
+		for name, value := range encodedGeometryMap {
+			decoded, err := geoparquet.Geometry(value, name, metadata, schema)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode geometry: %w", err)
+			}
+			decodedGeometryMap[name] = decoded
+		}
+
+		for i, rule := range decodedGeometryRules {
+			check := decodedGeometryChecks[i]
+			if err := rule.Row(decodedGeometryMap); errors.Is(err, ErrFatal) {
+				check.Message = err.Error()
+				check.Run = true
+				return report, nil
+			}
+		}
+	}
+
+	for i, rule := range encodedGeometryRules {
+		check := encodedGeometryChecks[i]
+		check.Run = true
+		if err := rule.Validate(); err != nil {
+			check.Message = err.Error()
+			if errors.Is(err, ErrFatal) {
+				return report, nil
+			}
+			continue
+		}
+		check.Passed = true
+	}
+
+	for i, rule := range decodedGeometryRules {
+		check := decodedGeometryChecks[i]
+		check.Run = true
+		if err := rule.Validate(); err != nil {
+			check.Message = err.Error()
+			if errors.Is(err, ErrFatal) {
+				return report, nil
+			}
+			continue
+		}
+		check.Passed = true
+	}
+
+	return report, nil
+}
+
+func run[T RuleData](v *Validator, checks []*Check, data T) error {
+	for i, r := range v.rules {
+		check := checks[i]
+		rule, ok := r.(*GenericRule[T])
+		if !ok {
+			continue
+		}
+		rule.Init(data)
+		check.Run = true
+		if err := rule.Validate(); err != nil {
+			check.Message = err.Error()
+			if errors.Is(err, ErrFatal) {
+				return err
+			}
+			continue
+		}
+		check.Passed = true
+	}
+	return nil
 }

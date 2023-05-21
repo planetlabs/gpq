@@ -12,3 +12,15 @@ wasm: web/wasm_exec.js ## Build wasm
 
 web/wasm_exec.js: ## Copy the wasm_exec.js file
 	@cp "$$(go env GOROOT)/misc/wasm/wasm_exec.js" web
+
+.PHONY: test
+test: ## Run the tests
+	@go test ./...
+
+.PHONY: fixtures
+fixtures: ## Run validator tests and update expected fixtures to match actuals
+	@go test ./internal/validator/... >/dev/null || true
+	@for f in ./internal/validator/testdata/*/actual.json; \
+			do \
+				cp "$$f" "$$(echo "$$f" | sed s/actual.json/expected.json/)"; \
+			done;

@@ -16,7 +16,6 @@ package geojson_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -561,20 +560,13 @@ func TestRoundTripSparseProperties(t *testing.T) {
 
 func makeGeoParquet[T any](rows []T, metadata *geoparquet.Metadata) (*parquet.File, error) {
 	data := &bytes.Buffer{}
-
-	writer := parquet.NewGenericWriter[T](data)
+	writer := geoparquet.NewGenericWriter[T](data, metadata)
 
 	_, writeErr := writer.Write(rows)
 	if writeErr != nil {
 		return nil, fmt.Errorf("trouble writing rows: %w", writeErr)
 	}
 
-	jsonMetadata, jsonErr := json.Marshal(metadata)
-	if jsonErr != nil {
-		return nil, fmt.Errorf("trouble encoding metadata as json: %w", jsonErr)
-	}
-
-	writer.SetKeyValueMetadata(geoparquet.MetadataKey, string(jsonMetadata))
 	closeErr := writer.Close()
 	if closeErr != nil {
 		return nil, fmt.Errorf("trouble closing writer: %w", closeErr)
@@ -584,12 +576,12 @@ func makeGeoParquet[T any](rows []T, metadata *geoparquet.Metadata) (*parquet.Fi
 }
 
 func TestWKT(t *testing.T) {
-	type RowType struct {
+	type Row struct {
 		Name     string `parquet:"name"`
 		Geometry string `parquet:"geometry"`
 	}
 
-	rows := []*RowType{
+	rows := []*Row{
 		{
 			Name:     "test-point",
 			Geometry: "POINT (1 2)",
@@ -640,12 +632,12 @@ func TestWKT(t *testing.T) {
 }
 
 func TestWKTNoEncoding(t *testing.T) {
-	type RowType struct {
+	type Row struct {
 		Name     string `parquet:"name"`
 		Geometry string `parquet:"geometry"`
 	}
 
-	rows := []*RowType{
+	rows := []*Row{
 		{
 			Name:     "test-point",
 			Geometry: "POINT (1 2)",
@@ -682,7 +674,7 @@ func TestWKTNoEncoding(t *testing.T) {
 }
 
 func TestWKB(t *testing.T) {
-	type RowType struct {
+	type Row struct {
 		Name     string `parquet:"name"`
 		Geometry []byte `parquet:"geometry"`
 	}
@@ -690,7 +682,7 @@ func TestWKB(t *testing.T) {
 	point, pointErr := wkb.Marshal(orb.Point{1, 2})
 	require.NoError(t, pointErr)
 
-	rows := []*RowType{
+	rows := []*Row{
 		{
 			Name:     "test-point",
 			Geometry: point,
@@ -726,7 +718,7 @@ func TestWKB(t *testing.T) {
 }
 
 func TestWKBNoEncoding(t *testing.T) {
-	type RowType struct {
+	type Row struct {
 		Name     string `parquet:"name"`
 		Geometry []byte `parquet:"geometry"`
 	}
@@ -734,7 +726,7 @@ func TestWKBNoEncoding(t *testing.T) {
 	point, pointErr := wkb.Marshal(orb.Point{1, 2})
 	require.NoError(t, pointErr)
 
-	rows := []*RowType{
+	rows := []*Row{
 		{
 			Name:     "test-point",
 			Geometry: point,

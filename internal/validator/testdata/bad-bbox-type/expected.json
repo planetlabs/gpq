@@ -1,0 +1,106 @@
+{
+  "checks": [
+    {
+      "title": "file must include a \"geo\" metadata key",
+      "run": true,
+      "passed": true
+    },
+    {
+      "title": "metadata must be a JSON object",
+      "run": true,
+      "passed": true
+    },
+    {
+      "title": "metadata must include a \"version\" string",
+      "run": true,
+      "passed": true
+    },
+    {
+      "title": "metadata must include a \"primary_column\" string",
+      "run": true,
+      "passed": true
+    },
+    {
+      "title": "metadata must include a \"columns\" object",
+      "run": true,
+      "passed": true
+    },
+    {
+      "title": "column metadata must include the \"primary_column\" name",
+      "run": false,
+      "passed": false
+    },
+    {
+      "title": "column metadata must include a valid \"encoding\" string",
+      "run": true,
+      "passed": true
+    },
+    {
+      "title": "column metadata must include a \"geometry_types\" list",
+      "run": true,
+      "passed": true
+    },
+    {
+      "title": "optional \"crs\" must be null or a PROJJSON object",
+      "run": true,
+      "passed": true
+    },
+    {
+      "title": "optional \"orientation\" must be a valid string",
+      "run": true,
+      "passed": true
+    },
+    {
+      "title": "optional \"edges\" must be a valid string",
+      "run": true,
+      "passed": true
+    },
+    {
+      "title": "optional \"bbox\" must be an array of 4 or 6 numbers",
+      "run": true,
+      "passed": false,
+      "message": "expected \"bbox\" for column \"geometry\" to be a list of numbers, got [\"not\",\"a\",\"bounding\",\"box\"]"
+    },
+    {
+      "title": "optional \"epoch\" must be a number",
+      "run": false,
+      "passed": false
+    },
+    {
+      "title": "geometry columns must be stored using the BYTE_ARRAY parquet type",
+      "run": false,
+      "passed": false
+    },
+    {
+      "title": "geometry columns must not be grouped",
+      "run": false,
+      "passed": false
+    },
+    {
+      "title": "geometry columns must be required or optional, not repeated",
+      "run": false,
+      "passed": false
+    },
+    {
+      "title": "all geometry values match the \"encoding\" metadata",
+      "run": false,
+      "passed": false
+    },
+    {
+      "title": "all geometry types must be included in the \"geometry_types\" metadata (if not empty)",
+      "run": false,
+      "passed": false
+    },
+    {
+      "title": "all polygon geometries must follow the \"orientation\" metadata (if present)",
+      "run": false,
+      "passed": false
+    },
+    {
+      "title": "all geometries must fall within the \"bbox\" metadata (if present)",
+      "run": false,
+      "passed": false
+    }
+  ],
+  "metadataOnly": false
+}

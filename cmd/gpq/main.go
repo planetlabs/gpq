@@ -27,6 +27,6 @@ var CLI struct {
 
 func main() {
 	ctx := kong.Parse(&CLI)
-	err := ctx.Run()
+	err := ctx.Run(ctx)
 	ctx.FatalIfErrorf(err)
 }
