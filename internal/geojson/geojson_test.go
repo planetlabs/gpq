@@ -775,7 +775,7 @@ func TestCodecUncompressed(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	convertOptions := &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 100, Compression: "uncompressed"}
+	convertOptions := &geojson.ConvertOptions{Compression: "uncompressed"}
 	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
 	assert.NoError(t, toParquetErr)
 
@@ -791,7 +791,7 @@ func TestCodecSnappy(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	convertOptions := &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 100, Compression: "snappy"}
+	convertOptions := &geojson.ConvertOptions{Compression: "snappy"}
 	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
 	assert.NoError(t, toParquetErr)
 
@@ -807,7 +807,7 @@ func TestCodecGzip(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	convertOptions := &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 100, Compression: "gzip"}
+	convertOptions := &geojson.ConvertOptions{Compression: "gzip"}
 	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
 	assert.NoError(t, toParquetErr)
 
@@ -823,7 +823,7 @@ func TestCodecBrotli(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	convertOptions := &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 100, Compression: "brotli"}
+	convertOptions := &geojson.ConvertOptions{Compression: "brotli"}
 	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
 	assert.NoError(t, toParquetErr)
 
@@ -839,7 +839,7 @@ func TestCodecZstd(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	convertOptions := &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 100, Compression: "zstd"}
+	convertOptions := &geojson.ConvertOptions{Compression: "zstd"}
 	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
 	assert.NoError(t, toParquetErr)
 
@@ -855,7 +855,7 @@ func TestCodecLz4raw(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	convertOptions := &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 100, Compression: "lz4raw"}
+	convertOptions := &geojson.ConvertOptions{Compression: "lz4raw"}
 	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
 	assert.NoError(t, toParquetErr)
 
@@ -871,7 +871,7 @@ func TestCodecInvalid(t *testing.T) {
 	require.NoError(t, openErr)
 
 	parquetBuffer := &bytes.Buffer{}
-	convertOptions := &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 100, Compression: "invalid"}
+	convertOptions := &geojson.ConvertOptions{Compression: "invalid"}
 	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
 	assert.EqualError(t, toParquetErr, "invalid compression codec invalid")
 }

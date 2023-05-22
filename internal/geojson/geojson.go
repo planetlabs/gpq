@@ -587,14 +587,30 @@ func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions
 	if convertOptions == nil {
 		convertOptions = defaultOptions
 	}
-	converter, converterErr := reader.Converter(convertOptions.MinFeatures, convertOptions.MaxFeatures)
+
+	minFeatures := convertOptions.MinFeatures
+	if minFeatures == 0 {
+		minFeatures = defaultOptions.MinFeatures
+	}
+
+	maxFeatures := convertOptions.MaxFeatures
+	if maxFeatures == 0 {
+		maxFeatures = defaultOptions.MaxFeatures
+	}
+
+	converter, converterErr := reader.Converter(minFeatures, maxFeatures)
 	if converterErr != nil {
 		return converterErr
 	}
 
 	schema := parquet.SchemaOf(reflect.New(converter.Type).Elem().Interface())
 
-	codec, codecErr := getCodec(convertOptions.Compression)
+	compression := convertOptions.Compression
+	if compression == "" {
+		compression = defaultOptions.Compression
+	}
+
+	codec, codecErr := getCodec(compression)
 	if codecErr != nil {
 		return codecErr
 	}
