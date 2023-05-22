@@ -7,7 +7,7 @@ require (
 	github.com/paulmach/orb v0.9.2
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.0
 	github.com/segmentio/parquet-go v0.0.0-20230427215636-d483faba23a5
-	github.com/stretchr/testify v1.8.2
+	github.com/stretchr/testify v1.8.3
 )
 
 require (
