@@ -769,3 +769,109 @@ func TestWKBNoEncoding(t *testing.T) {
 
 	assert.JSONEq(t, expected, output.String())
 }
+
+func TestCodecUncompressed(t *testing.T) {
+	geojsonFile, openErr := os.Open("testdata/example.geojson")
+	require.NoError(t, openErr)
+
+	parquetBuffer := &bytes.Buffer{}
+	convertOptions := &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 100, Compression: "uncompressed"}
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
+	assert.NoError(t, toParquetErr)
+
+	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
+	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
+	require.NoError(t, openErr)
+
+	assert.Equal(t, parquet.Uncompressed.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
+}
+
+func TestCodecSnappy(t *testing.T) {
+	geojsonFile, openErr := os.Open("testdata/example.geojson")
+	require.NoError(t, openErr)
+
+	parquetBuffer := &bytes.Buffer{}
+	convertOptions := &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 100, Compression: "snappy"}
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
+	assert.NoError(t, toParquetErr)
+
+	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
+	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
+	require.NoError(t, openErr)
+
+	assert.Equal(t, parquet.Snappy.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
+}
+
+func TestCodecGzip(t *testing.T) {
+	geojsonFile, openErr := os.Open("testdata/example.geojson")
+	require.NoError(t, openErr)
+
+	parquetBuffer := &bytes.Buffer{}
+	convertOptions := &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 100, Compression: "gzip"}
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
+	assert.NoError(t, toParquetErr)
+
+	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
+	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
+	require.NoError(t, openErr)
+
+	assert.Equal(t, parquet.Gzip.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
+}
+
+func TestCodecBrotli(t *testing.T) {
+	geojsonFile, openErr := os.Open("testdata/example.geojson")
+	require.NoError(t, openErr)
+
+	parquetBuffer := &bytes.Buffer{}
+	convertOptions := &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 100, Compression: "brotli"}
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
+	assert.NoError(t, toParquetErr)
+
+	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
+	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
+	require.NoError(t, openErr)
+
+	assert.Equal(t, parquet.Brotli.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
+}
+
+func TestCodecZstd(t *testing.T) {
+	geojsonFile, openErr := os.Open("testdata/example.geojson")
+	require.NoError(t, openErr)
+
+	parquetBuffer := &bytes.Buffer{}
+	convertOptions := &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 100, Compression: "zstd"}
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
+	assert.NoError(t, toParquetErr)
+
+	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
+	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
+	require.NoError(t, openErr)
+
+	assert.Equal(t, parquet.Zstd.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
+}
+
+func TestCodecLz4raw(t *testing.T) {
+	geojsonFile, openErr := os.Open("testdata/example.geojson")
+	require.NoError(t, openErr)
+
+	parquetBuffer := &bytes.Buffer{}
+	convertOptions := &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 100, Compression: "lz4raw"}
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
+	assert.NoError(t, toParquetErr)
+
+	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
+	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
+	require.NoError(t, openErr)
+
+	assert.Equal(t, parquet.Lz4Raw.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
+}
+
+func TestCodecInvalid(t *testing.T) {
+	geojsonFile, openErr := os.Open("testdata/example.geojson")
+	require.NoError(t, openErr)
+
+	parquetBuffer := &bytes.Buffer{}
+	convertOptions := &geojson.ConvertOptions{MinFeatures: 10, MaxFeatures: 100, Compression: "invalid"}
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
+	assert.EqualError(t, toParquetErr, "invalid compression codec invalid")
+}

@@ -28,6 +28,7 @@ import (
 	orbjson "github.com/paulmach/orb/geojson"
 	"github.com/planetlabs/gpq/internal/geoparquet"
 	"github.com/segmentio/parquet-go"
+	"github.com/segmentio/parquet-go/compress"
 )
 
 type FeatureWriter struct {
@@ -552,11 +553,32 @@ func (r *FeatureReader) readGeometryCollection() (*Feature, error) {
 type ConvertOptions struct {
 	MinFeatures int
 	MaxFeatures int
+	Compression string
 }
 
 var defaultOptions = &ConvertOptions{
 	MinFeatures: 1,
 	MaxFeatures: 50,
+	Compression: "zstd",
+}
+
+func getCodec(codec string) (compress.Codec, error) {
+	switch codec {
+	case "uncompressed":
+		return &parquet.Uncompressed, nil
+	case "snappy":
+		return &parquet.Snappy, nil
+	case "gzip":
+		return &parquet.Gzip, nil
+	case "brotli":
+		return &parquet.Brotli, nil
+	case "zstd":
+		return &parquet.Zstd, nil
+	case "lz4raw":
+		return &parquet.Lz4Raw, nil
+	default:
+		return nil, fmt.Errorf("invalid compression codec %s", codec)
+	}
 }
 
 func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions) error {
@@ -572,8 +594,12 @@ func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions
 
 	schema := parquet.SchemaOf(reflect.New(converter.Type).Elem().Interface())
 
+	codec, codecErr := getCodec(convertOptions.Compression)
+	if codecErr != nil {
+		return codecErr
+	}
 	options := []parquet.WriterOption{
-		parquet.Compression(&parquet.Zstd),
+		parquet.Compression(codec),
 		schema,
 	}
 
