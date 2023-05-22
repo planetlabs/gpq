@@ -579,8 +579,8 @@ func getCodec(codec string) (compress.Codec, error) {
 	default:
 		return nil, fmt.Errorf("invalid compression codec %s", codec)
 	}
-
 }
+
 func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions) error {
 	reader := NewFeatureReader(input)
 

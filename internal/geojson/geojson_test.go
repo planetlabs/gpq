@@ -784,7 +784,6 @@ func TestCodecUncompressed(t *testing.T) {
 	require.NoError(t, openErr)
 
 	assert.Equal(t, parquet.Uncompressed.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
-
 }
 
 func TestCodecSnappy(t *testing.T) {
@@ -801,7 +800,6 @@ func TestCodecSnappy(t *testing.T) {
 	require.NoError(t, openErr)
 
 	assert.Equal(t, parquet.Snappy.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
-
 }
 
 func TestCodecGzip(t *testing.T) {
@@ -818,7 +816,6 @@ func TestCodecGzip(t *testing.T) {
 	require.NoError(t, openErr)
 
 	assert.Equal(t, parquet.Gzip.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
-
 }
 
 func TestCodecBrotli(t *testing.T) {
@@ -835,8 +832,8 @@ func TestCodecBrotli(t *testing.T) {
 	require.NoError(t, openErr)
 
 	assert.Equal(t, parquet.Brotli.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
-
 }
+
 func TestCodecZstd(t *testing.T) {
 	geojsonFile, openErr := os.Open("testdata/example.geojson")
 	require.NoError(t, openErr)
