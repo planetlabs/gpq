@@ -2,12 +2,17 @@
   "name": "gpq",
   "private": true,
   "scripts": {
-    "test": "eslint main.js"
+    "lint": "eslint main.js",
+    "pretest": "npm run lint",
+    "test": "vitest run"
   },
   "devDependencies": {
+    "crypto": "^1.0.1",
     "eslint": "^8.40.0",
     "eslint-config-planet": "^20.0.3",
-    "vite": "^4.3.5"
+    "vite": "^4.3.8",
+    "vite-plugin-wasm": "^3.2.2",
+    "vitest": "^0.31.1"
   },
   "eslintConfig": {
     "extends": "planet",
@@ -18,7 +23,8 @@
       "wasm_exec.js"
     ],
     "globals": {
-      "Go": "readonly"
+      "Go": "readonly",
+      "globalThis": "readonly"
     },
     "rules": {
       "import/no-unresolved": [
