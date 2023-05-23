@@ -18,17 +18,41 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
+	"github.com/paulmach/orb"
+	"github.com/paulmach/orb/encoding/wkb"
+	"github.com/paulmach/orb/encoding/wkt"
 	"github.com/segmentio/parquet-go"
 )
 
 const (
-	Version               = "1.0.0-beta.1"
-	MetadataKey           = "geo"
-	EncodingWKB           = "WKB"
-	EncodingWKT           = "WKT"
-	defaultGeometryColumn = "geometry"
+	Version                     = "1.0.0-beta.1"
+	MetadataKey                 = "geo"
+	EncodingWKB                 = "WKB"
+	EncodingWKT                 = "WKT"
+	EdgesPlanar                 = "planar"
+	EdgesSpherical              = "spherical"
+	OrientationCounterClockwise = "counterclockwise"
+	defaultGeometryColumn       = "geometry"
 )
+
+var GeometryTypes = []string{
+	"Point",
+	"LineString",
+	"Polygon",
+	"MultiPoint",
+	"MultiLineString",
+	"MultiPolygon",
+	"GeometryCollection",
+	"Point Z",
+	"LineString Z",
+	"Polygon Z",
+	"MultiPoint Z",
+	"MultiLineString Z",
+	"MultiPolygon Z",
+	"GeometryCollection Z",
+}
 
 type Metadata struct {
 	Version       string                     `json:"version"`
@@ -44,7 +68,7 @@ type GeometryColumn struct {
 	Edges         string    `json:"edges,omitempty"`
 	Orientation   string    `json:"orientation,omitempty"`
 	Bounds        []float64 `json:"bbox,omitempty"`
-	Epoch         int       `json:"epoch,omitempty"`
+	Epoch         float64   `json:"epoch,omitempty"`
 }
 
 func (col *GeometryColumn) GetGeometryTypes() []string {
@@ -189,4 +213,76 @@ func (r *RowReader) Next() (parquet.Row, error) {
 
 func (r *RowReader) Close() error {
 	return r.closeReader()
+}
+
+type GenericWriter[T any] struct {
+	writer   *parquet.GenericWriter[T]
+	metadata *Metadata
+}
+
+func NewGenericWriter[T any](output io.Writer, metadata *Metadata, options ...parquet.WriterOption) *GenericWriter[T] {
+	return &GenericWriter[T]{
+		writer:   parquet.NewGenericWriter[T](output, options...),
+		metadata: metadata,
+	}
+}
+
+func (w *GenericWriter[T]) Write(rows []T) (int, error) {
+	return w.writer.Write(rows)
+}
+
+func (w *GenericWriter[T]) Close() error {
+	jsonMetadata, jsonErr := json.Marshal(w.metadata)
+	if jsonErr != nil {
+		return fmt.Errorf("trouble encoding metadata as json: %w", jsonErr)
+	}
+
+	w.writer.SetKeyValueMetadata(MetadataKey, string(jsonMetadata))
+	return w.writer.Close()
+}
+
+var stringType = parquet.String().Type()
+
+func Geometry(value any, name string, metadata *Metadata, schema *parquet.Schema) (orb.Geometry, error) {
+	geometryString, ok := value.(string)
+	if !ok {
+		return nil, fmt.Errorf("unexpected geometry type: %t", value)
+	}
+
+	encoding := metadata.Columns[name].Encoding
+	if encoding == "" {
+		column, ok := schema.Lookup(name)
+		if !ok {
+			return nil, fmt.Errorf("missing column: %s", name)
+		}
+		nodeType := column.Node.Type()
+		if nodeType == stringType {
+			encoding = EncodingWKT
+		} else if nodeType == parquet.ByteArrayType {
+			encoding = EncodingWKB
+		} else {
+			return nil, fmt.Errorf("unsupported geometry type: %s", nodeType)
+		}
+	}
+
+	var geometry orb.Geometry
+
+	switch strings.ToUpper(encoding) {
+	case EncodingWKB:
+		g, err := wkb.Unmarshal([]byte(geometryString))
+		if err != nil {
+			return nil, fmt.Errorf("trouble reading geometry: %w", err)
+		}
+		geometry = g
+	case EncodingWKT:
+		g, err := wkt.Unmarshal(geometryString)
+		if err != nil {
+			return nil, fmt.Errorf("trouble reading geometry: %w", err)
+		}
+		geometry = g
+	default:
+		return nil, fmt.Errorf("unsupported encoding: %s", encoding)
+	}
+
+	return geometry, nil
 }

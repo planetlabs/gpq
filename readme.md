@@ -67,6 +67,5 @@ gpq describe example.parquet
 
  * Non-geographic CRS information is not preserved when converting GeoParquet to GeoJSON.
  * Page and row group size is not configurable when writing GeoParquet.  This may change soon.
- * GeoParquet files are written using ZSTD compression.  This is not configurable but may change soon.
  * Reading GeoParquet files with multiple geometry columns is supported.  Reading GeoJSON files with multiple geometry properties is not supported.
  * Feature identifiers in GeoJSON are not written to GeoParquet columns.  This may change soon.

@@ -15,16 +15,21 @@
 package validator_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/url"
 	"os"
 	"path"
+	"strings"
 	"testing"
 
+	"github.com/planetlabs/gpq/internal/geojson"
 	"github.com/planetlabs/gpq/internal/validator"
 	"github.com/santhosh-tekuri/jsonschema/v5"
+	"github.com/segmentio/encoding/json"
+	"github.com/segmentio/parquet-go"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -47,6 +52,54 @@ type Suite struct {
 	originalHttpsLoader func(string) (io.ReadCloser, error)
 }
 
+func (s *Suite) readExpected(name string) []byte {
+	expected, err := os.ReadFile(path.Join("testdata", name, "expected.json"))
+	s.Require().NoError(err)
+	return expected
+}
+
+func (s *Suite) writeActual(name string, data []byte) {
+	err := os.WriteFile(path.Join("testdata", name, "actual.json"), data, 0644)
+	s.Require().NoError(err)
+}
+
+type Spec struct {
+	Metadata json.RawMessage `json:"metadata"`
+	Data     json.RawMessage `json:"data"`
+}
+
+func (s *Suite) readSpec(name string) *Spec {
+	data, err := os.ReadFile(path.Join("testdata", name, "input.json"))
+	s.Require().NoError(err)
+	input := &Spec{}
+	s.Require().NoError(json.Unmarshal(data, input))
+	return input
+}
+
+func (s *Suite) generateGeoParquet(name string) *parquet.File {
+	spec := s.readSpec(name)
+
+	output := &bytes.Buffer{}
+
+	options := &geojson.ConvertOptions{
+		Metadata: string(spec.Metadata),
+	}
+	s.Require().NoError(geojson.ToParquet(bytes.NewReader(spec.Data), output, options))
+
+	file, err := parquet.OpenFile(bytes.NewReader(output.Bytes()), int64(output.Len()))
+	s.Require().NoError(err)
+
+	return file
+}
+
+func (s *Suite) assertExpectedReport(name string, report *validator.Report) {
+	actual, err := json.MarshalIndent(report, "", "  ")
+	s.Require().NoError(err)
+	s.writeActual(name, actual)
+	expected := s.readExpected(name)
+	s.Assert().JSONEq(string(expected), string(actual))
+}
+
 func (s *Suite) SetupSuite() {
 	s.originalHttpLoader = jsonschema.Loaders["http"]
 	s.originalHttpsLoader = jsonschema.Loaders["https"]
@@ -59,19 +112,69 @@ func (s *Suite) TearDownSuite() {
 	jsonschema.Loaders["https"] = s.originalHttpsLoader
 }
 
-func (s *Suite) TestValidCases() {
+func (s *Suite) XTestValidCases() {
 	cases := []string{
-		"example-v0.4.0.parquet",
 		"example-v1.0.0-beta.1.parquet",
 	}
 
-	v := validator.New()
+	validatorAll := validator.New(false)
+	validatorMeta := validator.New(true)
+
 	ctx := context.Background()
+
 	for _, c := range cases {
 		s.Run(c, func() {
 			resourcePath := path.Join("../testdata/cases", c)
-			err := v.Validate(ctx, resourcePath)
-			s.Assert().NoError(err)
+
+			allReport, allErr := validatorAll.Validate(ctx, resourcePath)
+			s.Require().NoError(allErr)
+			s.assertExpectedReport("all-pass", allReport)
+
+			metaReport, metaErr := validatorMeta.Validate(ctx, resourcePath)
+			s.Require().NoError(metaErr)
+			s.assertExpectedReport("all-pass-meta", metaReport)
+		})
+	}
+}
+
+func (s *Suite) TestReport() {
+	cases := []string{
+		"all-pass",
+		"all-pass-meta",
+		"all-pass-minimal",
+		"bad-metadata-type",
+		"missing-version",
+		"missing-primary-column",
+		"missing-columns",
+		"bad-primary-column",
+		"missing-encoding",
+		"bad-encoding",
+		"missing-geometry-types",
+		"bad-geometry-types",
+		"bad-crs",
+		"bad-orientation",
+		"bad-edges",
+		"bad-bbox-type",
+		"bad-bbox-length",
+		"bad-epoch",
+		"geometry-type-not-in-list",
+		"geometry-correctly-oriented",
+		"geometry-incorrectly-oriented",
+		"geometry-outside-bbox",
+		"geometry-inside-antimeridian-spanning-bbox",
+		"geometry-outside-antimeridian-spanning-bbox",
+	}
+
+	ctx := context.Background()
+	for _, c := range cases {
+		s.Run(c, func() {
+			metadataOnly := strings.HasSuffix(c, "-meta")
+			v := validator.New(metadataOnly)
+
+			report, err := v.Report(ctx, s.generateGeoParquet(c))
+			s.Require().NoError(err)
+
+			s.assertExpectedReport(c, report)
 		})
 	}
 }

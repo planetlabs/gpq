@@ -20,11 +20,8 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"strings"
 
 	"github.com/paulmach/orb"
-	"github.com/paulmach/orb/encoding/wkb"
-	"github.com/paulmach/orb/encoding/wkt"
 	orbjson "github.com/paulmach/orb/geojson"
 	"github.com/planetlabs/gpq/internal/geoparquet"
 	"github.com/segmentio/parquet-go"
@@ -47,8 +44,6 @@ func NewFeatureWriter(writer io.Writer, metadata *geoparquet.Metadata, schema *p
 	return featureWriter, nil
 }
 
-var stringType = parquet.String().Type()
-
 func toFeature(row parquet.Row, schema *parquet.Schema, metadata *geoparquet.Metadata) (*Feature, error) {
 	properties := map[string]any{}
 	if err := schema.Reconstruct(&properties, row); err != nil {
@@ -57,63 +52,28 @@ func toFeature(row parquet.Row, schema *parquet.Schema, metadata *geoparquet.Met
 
 	var primaryGeometry orb.Geometry
 
-	for geometryName := range metadata.Columns {
-		geometryInterface, ok := properties[geometryName]
+	for name := range metadata.Columns {
+		value, ok := properties[name]
 		if !ok {
-			return nil, fmt.Errorf("missing geometry column: %s", geometryName)
+			return nil, fmt.Errorf("missing geometry column: %s", name)
 		}
 
-		if geometryName == metadata.PrimaryColumn {
-			delete(properties, geometryName)
+		if name == metadata.PrimaryColumn {
+			delete(properties, name)
 		}
-		if geometryInterface == nil {
+		if value == nil {
 			continue
 		}
 
-		geometryString, ok := geometryInterface.(string)
-		if !ok {
-			return nil, fmt.Errorf("unexpected geometry type: %t", geometryInterface)
+		geometry, err := geoparquet.Geometry(value, name, metadata, schema)
+		if err != nil {
+			return nil, err
 		}
 
-		encoding := metadata.Columns[geometryName].Encoding
-		if encoding == "" {
-			column, ok := schema.Lookup(geometryName)
-			if !ok {
-				return nil, fmt.Errorf("missing column: %s", geometryName)
-			}
-			nodeType := column.Node.Type()
-			if nodeType == stringType {
-				encoding = geoparquet.EncodingWKT
-			} else if nodeType == parquet.ByteArrayType {
-				encoding = geoparquet.EncodingWKB
-			} else {
-				return nil, fmt.Errorf("unsupported geometry type: %s", nodeType)
-			}
-		}
-
-		var geometry orb.Geometry
-
-		switch strings.ToUpper(encoding) {
-		case geoparquet.EncodingWKB:
-			g, err := wkb.Unmarshal([]byte(geometryString))
-			if err != nil {
-				return nil, fmt.Errorf("trouble reading geometry: %w", err)
-			}
-			geometry = g
-		case geoparquet.EncodingWKT:
-			g, err := wkt.Unmarshal(geometryString)
-			if err != nil {
-				return nil, fmt.Errorf("trouble reading geometry: %w", err)
-			}
-			geometry = g
-		default:
-			return nil, fmt.Errorf("unsupported encoding: %s", encoding)
-		}
-
-		if geometryName == metadata.PrimaryColumn {
+		if name == metadata.PrimaryColumn {
 			primaryGeometry = geometry
 		} else {
-			properties[geometryName] = geometry
+			properties[name] = geometry
 		}
 	}
 
@@ -554,6 +514,7 @@ type ConvertOptions struct {
 	MinFeatures int
 	MaxFeatures int
 	Compression string
+	Metadata    string
 }
 
 var defaultOptions = &ConvertOptions{
@@ -629,6 +590,8 @@ func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions
 	var bounds *orb.Bound
 	geometryTypeLookup := map[string]bool{}
 
+	metadataString := convertOptions.Metadata
+
 	for {
 		feature, err := reader.Next()
 		if err == io.EOF {
@@ -638,7 +601,7 @@ func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions
 			return err
 		}
 
-		if feature.Geometry != nil {
+		if metadataString == "" && feature.Geometry != nil {
 			b := feature.Geometry.Bound()
 			if bounds == nil {
 				bounds = &b
@@ -648,6 +611,7 @@ func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions
 			}
 			geometryTypeLookup[feature.Geometry.GeoJSONType()] = true
 		}
+
 		row, err := converter.Convert(feature)
 		if err != nil {
 			return err
@@ -658,26 +622,29 @@ func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions
 		}
 	}
 
-	metadata := GetDefaultMetadata()
-	if bounds != nil {
-		metadata.Columns[metadata.PrimaryColumn].Bounds = []float64{
-			bounds.Left(), bounds.Bottom(), bounds.Right(), bounds.Top(),
+	if metadataString == "" {
+		metadata := GetDefaultMetadata()
+		if bounds != nil {
+			metadata.Columns[metadata.PrimaryColumn].Bounds = []float64{
+				bounds.Left(), bounds.Bottom(), bounds.Right(), bounds.Top(),
+			}
 		}
-	}
 
-	geometryTypes := []string{}
-	if len(geometryTypeLookup) > 0 {
-		for geometryType := range geometryTypeLookup {
-			geometryTypes = append(geometryTypes, geometryType)
+		geometryTypes := []string{}
+		if len(geometryTypeLookup) > 0 {
+			for geometryType := range geometryTypeLookup {
+				geometryTypes = append(geometryTypes, geometryType)
+			}
 		}
-	}
-	metadata.Columns[metadata.PrimaryColumn].GeometryTypes = geometryTypes
+		metadata.Columns[metadata.PrimaryColumn].GeometryTypes = geometryTypes
 
-	metadataEncoded, jsonErr := json.Marshal(metadata)
-	if jsonErr != nil {
-		return fmt.Errorf("failed to serialize geo metadata: %w", jsonErr)
+		metadataBytes, jsonErr := json.Marshal(metadata)
+		if jsonErr != nil {
+			return fmt.Errorf("failed to serialize geo metadata: %w", jsonErr)
+		}
+		metadataString = string(metadataBytes)
 	}
 
-	writer.SetKeyValueMetadata(geoparquet.MetadataKey, string(metadataEncoded))
+	writer.SetKeyValueMetadata(geoparquet.MetadataKey, metadataString)
 	return writer.Close()
 }

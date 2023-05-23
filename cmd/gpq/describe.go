@@ -24,8 +24,8 @@ import (
 )
 
 type DescribeCmd struct {
-	Input  string `arg:"" name:"input" help:"Path to a GeoParquet file." type:"existingfile"`
-	Pretty bool   `help:"Add newlines and indentation to the JSON output."`
+	Input    string `arg:"" name:"input" help:"Path to a GeoParquet file." type:"existingfile"`
+	Unpretty bool   `help:"No newlines or indentation in the JSON output."`
 }
 
 func (c *DescribeCmd) Run() error {
@@ -56,7 +56,7 @@ func (c *DescribeCmd) Run() error {
 	}
 
 	encoder := json.NewEncoder(os.Stdout)
-	if c.Pretty {
+	if !c.Unpretty {
 		encoder.SetIndent("", "  ")
 		encoder.SetEscapeHTML(false)
 	}
