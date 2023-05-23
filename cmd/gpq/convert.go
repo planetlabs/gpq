@@ -30,7 +30,7 @@ type ConvertCmd struct {
 	To          string `help:"Output file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet" default:"auto"`
 	Min         int    `help:"Minimum number of features to consider when building a schema." default:"10"`
 	Max         int    `help:"Maximum number of features to consider when building a schema." default:"100"`
-	Compression string `help:"Parquet compression to use.  Possible values: ${enum}." enum:"uncompressed, snappy, gzip, brotli, zstd, lz4raw" default:"zstd"`
+	Compression string `help:"Parquet compression to use.  Possible values: ${enum}." enum:"uncompressed, snappy, gzip, brotli, zstd, lz4raw" default:"gzip"`
 }
 
 type FormatType string

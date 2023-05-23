@@ -520,7 +520,7 @@ type ConvertOptions struct {
 var defaultOptions = &ConvertOptions{
 	MinFeatures: 1,
 	MaxFeatures: 50,
-	Compression: "zstd",
+	Compression: "gzip",
 }
 
 func getCodec(codec string) (compress.Codec, error) {
