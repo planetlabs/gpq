@@ -32,13 +32,19 @@ gpq --help
 
 ### validate
 
-The `validate` command validates the "geo" file metadata against [the schema](https://github.com/opengeospatial/geoparquet/blob/main/format-specs/schema.json).
+The `validate` command generates a validation report for a GeoParquet file.
 
 ```shell
 gpq validate example.parquet
 ```
 
-In the future, this command might also read geometries to confirm that they are valid and that any provided `bbox` is correct.  But for now, just the "geo" metadata is validated against the schema.
+By default, the command writes out a text report with a list of status checks.  The command exits with status code 1 if one or more of the checks does not pass.
+
+The validation includes scanning the data to ensure that values in geometry columns conform with the specification (making assertions about the encoding, ring orientation, bounding box, and alignment with other metadata).  For very large GeoParquet files, the rules that scan the geometry data can be skipped with the `--metadata-only` argument.  With this argument, the command only runs rules related to the file metadata and Parquet schema.
+
+To generate a JSON report instead of the text report, use the `--format json` argument.
+
+See `gpq validate --help` for the full list of options.
 
 ### convert
 
@@ -54,12 +60,14 @@ gpq convert example.geojson example.parquet
 gpq convert example.parquet example.geojson
 ```
 
+The `--compression` argument can be used to control the compression codec used when writing GeoParquet.  See `gpq convert --help` for the available options.
+
+
 ### describe
 
 The `describe` command prints schema information and metadata about a GeoParquet file.
 
 ```shell
-# use the `--pretty` argument to format the JSON output
 gpq describe example.parquet
 ```
 
@@ -67,5 +75,4 @@ gpq describe example.parquet
 
  * Non-geographic CRS information is not preserved when converting GeoParquet to GeoJSON.
  * Page and row group size is not configurable when writing GeoParquet.  This may change soon.
- * Reading GeoParquet files with multiple geometry columns is supported.  Reading GeoJSON files with multiple geometry properties is not supported.
  * Feature identifiers in GeoJSON are not written to GeoParquet columns.  This may change soon.
