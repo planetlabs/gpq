@@ -7,7 +7,7 @@ require (
 	github.com/fatih/color v1.15.0
 	github.com/paulmach/orb v0.9.2
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.0
-	github.com/segmentio/encoding v0.3.5
+	github.com/segmentio/encoding v0.3.6
 	github.com/segmentio/parquet-go v0.0.0-20230427215636-d483faba23a5
 	github.com/stretchr/testify v1.8.3
 )
