@@ -505,7 +505,7 @@ func GeometryEncoding() Rule {
 			metadata := info.Metadata
 
 			for name, encoded := range geometries {
-				_, err := geoparquet.Geometry(encoded, name, metadata, schema)
+				_, _, err := geoparquet.Geometry(encoded, name, metadata, schema)
 				if err != nil {
 					return fatal("invalid geometry in column %q: %s", name, err)
 				}

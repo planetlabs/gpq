@@ -15,17 +15,19 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/planetlabs/gpq/internal/geojson"
+	"github.com/planetlabs/gpq/internal/geoparquet"
 	"github.com/segmentio/parquet-go"
 )
 
 type ConvertCmd struct {
 	Input       string `arg:"" name:"input" help:"Input file." type:"existingfile"`
-	From        string `help:"Input file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet" default:"auto"`
+	From        string `help:"Input file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet, parquet" default:"auto"`
 	Output      string `arg:"" name:"output" help:"Output file." type:"path"`
 	To          string `help:"Output file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet" default:"auto"`
 	Min         int    `help:"Minimum number of features to consider when building a schema." default:"10"`
@@ -38,6 +40,7 @@ type FormatType string
 const (
 	AutoType       FormatType = "auto"
 	GeoParquetType FormatType = "geoparquet"
+	ParquetType    FormatType = "parquet"
 	GeoJSONType    FormatType = "geojson"
 	UnknownType    FormatType = "unknown"
 )
@@ -45,6 +48,7 @@ const (
 var validTypes = map[FormatType]bool{
 	AutoType:       true,
 	GeoParquetType: true,
+	ParquetType:    true,
 	GeoJSONType:    true,
 }
 
@@ -60,8 +64,11 @@ func getFormatType(filename string) FormatType {
 	if strings.HasSuffix(filename, ".json") || strings.HasSuffix(filename, ".geojson") {
 		return GeoJSONType
 	}
-	if strings.HasSuffix(filename, ".pq") || strings.HasSuffix(filename, ".parquet") || strings.HasSuffix(filename, ".geoparquet") {
+	if strings.HasSuffix(filename, ".gpq") || strings.HasSuffix(filename, ".geoparquet") {
 		return GeoParquetType
+	}
+	if strings.HasSuffix(filename, ".pq") || strings.HasSuffix(filename, ".parquet") {
+		return ParquetType
 	}
 	return UnknownType
 }
@@ -83,10 +90,6 @@ func (c *ConvertCmd) Run() error {
 		return fmt.Errorf("could not determine input format for %s", c.Input)
 	}
 
-	if inputFormat == outputFormat {
-		return fmt.Errorf("input and output are both the same type: %s", inputFormat)
-	}
-
 	input, readErr := os.Open(c.Input)
 	if readErr != nil {
 		return fmt.Errorf("failed to read from %q: %w", c.Input, readErr)
@@ -99,20 +102,27 @@ func (c *ConvertCmd) Run() error {
 	}
 	defer output.Close()
 
-	if inputFormat == GeoParquetType {
-		stat, statErr := os.Stat(c.Input)
-		if statErr != nil {
-			return fmt.Errorf("failed to get size of %q: %w", c.Input, statErr)
+	if inputFormat == GeoJSONType {
+		if outputFormat != ParquetType && outputFormat != GeoParquetType {
+			return errors.New("GeoJSON input can only be converted to GeoParquet")
 		}
+		convertOptions := &geojson.ConvertOptions{MinFeatures: c.Min, MaxFeatures: c.Max, Compression: c.Compression}
+		return geojson.ToParquet(input, output, convertOptions)
+	}
 
-		file, fileErr := parquet.OpenFile(input, stat.Size())
-		if fileErr != nil {
-			return fileErr
-		}
+	stat, statErr := os.Stat(c.Input)
+	if statErr != nil {
+		return fmt.Errorf("failed to get size of %q: %w", c.Input, statErr)
+	}
 
+	file, fileErr := parquet.OpenFile(input, stat.Size())
+	if fileErr != nil {
+		return fileErr
+	}
+
+	if outputFormat == GeoJSONType {
 		return geojson.FromParquet(file, output)
 	}
 
-	convertOptions := &geojson.ConvertOptions{MinFeatures: c.Min, MaxFeatures: c.Max, Compression: c.Compression}
-	return geojson.ToParquet(input, output, convertOptions)
+	return geoparquet.FromParquet(file, output, nil)
 }
