@@ -235,7 +235,7 @@ func (v *Validator) Report(ctx context.Context, file *parquet.File) (*Report, er
 
 		decodedGeometryMap := DecodedGeometryMap{}
 		for name, value := range encodedGeometryMap {
-			decoded, err := geoparquet.Geometry(value, name, metadata, schema)
+			decoded, _, err := geoparquet.Geometry(value, name, metadata, schema)
 			if err != nil {
 				return nil, fmt.Errorf("failed to decode geometry: %w", err)
 			}

@@ -24,6 +24,7 @@ import (
 	"github.com/paulmach/orb/encoding/wkb"
 	"github.com/paulmach/orb/encoding/wkt"
 	"github.com/segmentio/parquet-go"
+	"github.com/segmentio/parquet-go/compress"
 )
 
 const (
@@ -105,15 +106,19 @@ func (col *GeometryColumn) GetGeometryTypes() []string {
 	return types
 }
 
+func getDefaultGeometryColumn() *GeometryColumn {
+	return &GeometryColumn{
+		Encoding:      EncodingWKB,
+		GeometryTypes: []string{},
+	}
+}
+
 func DefaultMetadata() *Metadata {
 	return &Metadata{
 		Version:       Version,
 		PrimaryColumn: defaultGeometryColumn,
 		Columns: map[string]*GeometryColumn{
-			defaultGeometryColumn: {
-				Encoding:      EncodingWKB,
-				GeometryTypes: []string{},
-			},
+			defaultGeometryColumn: getDefaultGeometryColumn(),
 		},
 	}
 }
@@ -243,17 +248,17 @@ func (w *GenericWriter[T]) Close() error {
 
 var stringType = parquet.String().Type()
 
-func Geometry(value any, name string, metadata *Metadata, schema *parquet.Schema) (orb.Geometry, error) {
+func Geometry(value any, name string, metadata *Metadata, schema *parquet.Schema) (orb.Geometry, string, error) {
 	geometryString, ok := value.(string)
 	if !ok {
-		return nil, fmt.Errorf("unexpected geometry type: %t", value)
+		return nil, "", fmt.Errorf("unexpected geometry type: %t", value)
 	}
 
 	encoding := metadata.Columns[name].Encoding
 	if encoding == "" {
 		column, ok := schema.Lookup(name)
 		if !ok {
-			return nil, fmt.Errorf("missing column: %s", name)
+			return nil, "", fmt.Errorf("missing column: %s", name)
 		}
 		nodeType := column.Node.Type()
 		if nodeType == stringType {
@@ -261,7 +266,7 @@ func Geometry(value any, name string, metadata *Metadata, schema *parquet.Schema
 		} else if nodeType == parquet.ByteArrayType {
 			encoding = EncodingWKB
 		} else {
-			return nil, fmt.Errorf("unsupported geometry type: %s", nodeType)
+			return nil, "", fmt.Errorf("unsupported geometry type: %s", nodeType)
 		}
 	}
 
@@ -271,18 +276,173 @@ func Geometry(value any, name string, metadata *Metadata, schema *parquet.Schema
 	case EncodingWKB:
 		g, err := wkb.Unmarshal([]byte(geometryString))
 		if err != nil {
-			return nil, fmt.Errorf("trouble reading geometry: %w", err)
+			return nil, "", fmt.Errorf("trouble reading geometry as WKB: %w", err)
 		}
 		geometry = g
 	case EncodingWKT:
 		g, err := wkt.Unmarshal(geometryString)
 		if err != nil {
-			return nil, fmt.Errorf("trouble reading geometry: %w", err)
+			return nil, "", fmt.Errorf("trouble reading geometry as WKT: %w", err)
 		}
 		geometry = g
 	default:
-		return nil, fmt.Errorf("unsupported encoding: %s", encoding)
+		return nil, "", fmt.Errorf("unsupported encoding: %s", encoding)
 	}
 
-	return geometry, nil
+	return geometry, strings.ToUpper(encoding), nil
+}
+
+func GetCodec(codec string) (compress.Codec, error) {
+	switch codec {
+	case "uncompressed":
+		return &parquet.Uncompressed, nil
+	case "snappy":
+		return &parquet.Snappy, nil
+	case "gzip":
+		return &parquet.Gzip, nil
+	case "brotli":
+		return &parquet.Brotli, nil
+	case "zstd":
+		return &parquet.Zstd, nil
+	case "lz4raw":
+		return &parquet.Lz4Raw, nil
+	default:
+		return nil, fmt.Errorf("invalid compression codec %s", codec)
+	}
+}
+
+type ConvertOptions struct {
+	Compression string
+}
+
+func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOptions) error {
+	if convertOptions == nil {
+		convertOptions = &ConvertOptions{}
+	}
+	reader := NewRowReader(file)
+
+	schema := file.Schema()
+
+	codec := schema.Compression()
+	if convertOptions.Compression != "" {
+		candidate, codecErr := GetCodec(convertOptions.Compression)
+		if codecErr != nil {
+			return codecErr
+		}
+		codec = candidate
+	}
+
+	options := []parquet.WriterOption{
+		parquet.Compression(codec),
+		schema,
+	}
+
+	writerConfig, configErr := parquet.NewWriterConfig(options...)
+	if configErr != nil {
+		return configErr
+	}
+
+	writer := parquet.NewGenericWriter[any](output, writerConfig)
+
+	boundsLookup := map[string]*orb.Bound{}
+	geometryTypeLookup := map[string]map[string]bool{}
+
+	metadata, metadataErr := GetMetadata(file)
+	if metadataErr != nil {
+		metadata = &Metadata{
+			PrimaryColumn: defaultGeometryColumn,
+			Columns: map[string]*GeometryColumn{
+				defaultGeometryColumn: {},
+			},
+		}
+	}
+
+	for {
+		row, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		properties := map[string]any{}
+		if err := schema.Reconstruct(&properties, row); err != nil {
+			return err
+		}
+
+		for name, columnMetadata := range metadata.Columns {
+			value, ok := properties[name]
+			if !ok {
+				return fmt.Errorf("missing geometry column: %s", name)
+			}
+			geometry, encoding, err := Geometry(value, name, metadata, schema)
+			if err != nil {
+				return err
+			}
+
+			if encoding != EncodingWKB {
+				column, ok := schema.Lookup(name)
+				if !ok {
+					return fmt.Errorf("missing geometry column: %s", name)
+				}
+				geomBytes, wkbErr := wkb.Marshal(geometry)
+				if wkbErr != nil {
+					return fmt.Errorf("failed to encode %q geometry as wkb: %w", name, wkbErr)
+				}
+				row[column.ColumnIndex] = parquet.ValueOf(geomBytes)
+			}
+
+			if columnMetadata.Encoding != EncodingWKB {
+				columnMetadata.Encoding = EncodingWKB
+			}
+
+			bounds := geometry.Bound()
+			if boundsLookup[name] != nil {
+				bounds = bounds.Union(*boundsLookup[name])
+			}
+			boundsLookup[name] = &bounds
+
+			if geometryTypeLookup[name] == nil {
+				geometryTypeLookup[name] = map[string]bool{}
+			}
+			geometryTypeLookup[name][geometry.GeoJSONType()] = true
+		}
+
+		_, writeErr := writer.WriteRows([]parquet.Row{row})
+		if writeErr != nil {
+			return writeErr
+		}
+	}
+
+	for name, bounds := range boundsLookup {
+		if bounds != nil {
+			if metadata.Columns[name] == nil {
+				metadata.Columns[name] = getDefaultGeometryColumn()
+			}
+			metadata.Columns[name].Bounds = []float64{
+				bounds.Left(), bounds.Bottom(), bounds.Right(), bounds.Top(),
+			}
+		}
+	}
+
+	for name, types := range geometryTypeLookup {
+		geometryTypes := []string{}
+		if len(types) > 0 {
+			for geometryType := range types {
+				geometryTypes = append(geometryTypes, geometryType)
+			}
+		}
+		if metadata.Columns[name] == nil {
+			metadata.Columns[name] = getDefaultGeometryColumn()
+		}
+		metadata.Columns[name].GeometryTypes = geometryTypes
+	}
+
+	metadataBytes, jsonErr := json.Marshal(metadata)
+	if jsonErr != nil {
+		return fmt.Errorf("failed to serialize geo metadata: %w", jsonErr)
+	}
+	writer.SetKeyValueMetadata(MetadataKey, string(metadataBytes))
+	return writer.Close()
 }

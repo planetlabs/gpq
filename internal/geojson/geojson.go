@@ -25,7 +25,6 @@ import (
 	orbjson "github.com/paulmach/orb/geojson"
 	"github.com/planetlabs/gpq/internal/geoparquet"
 	"github.com/segmentio/parquet-go"
-	"github.com/segmentio/parquet-go/compress"
 )
 
 type FeatureWriter struct {
@@ -65,7 +64,7 @@ func toFeature(row parquet.Row, schema *parquet.Schema, metadata *geoparquet.Met
 			continue
 		}
 
-		geometry, err := geoparquet.Geometry(value, name, metadata, schema)
+		geometry, _, err := geoparquet.Geometry(value, name, metadata, schema)
 		if err != nil {
 			return nil, err
 		}
@@ -523,25 +522,6 @@ var defaultOptions = &ConvertOptions{
 	Compression: "gzip",
 }
 
-func getCodec(codec string) (compress.Codec, error) {
-	switch codec {
-	case "uncompressed":
-		return &parquet.Uncompressed, nil
-	case "snappy":
-		return &parquet.Snappy, nil
-	case "gzip":
-		return &parquet.Gzip, nil
-	case "brotli":
-		return &parquet.Brotli, nil
-	case "zstd":
-		return &parquet.Zstd, nil
-	case "lz4raw":
-		return &parquet.Lz4Raw, nil
-	default:
-		return nil, fmt.Errorf("invalid compression codec %s", codec)
-	}
-}
-
 func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions) error {
 	reader := NewFeatureReader(input)
 
@@ -571,7 +551,7 @@ func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions
 		compression = defaultOptions.Compression
 	}
 
-	codec, codecErr := getCodec(compression)
+	codec, codecErr := geoparquet.GetCodec(compression)
 	if codecErr != nil {
 		return codecErr
 	}
