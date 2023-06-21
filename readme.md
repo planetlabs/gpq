@@ -60,6 +60,15 @@ gpq convert example.geojson example.parquet
 gpq convert example.parquet example.geojson
 ```
 
+The `convert` command can also be used to convert an input Parquet file without "geo" metadata to a valid GeoParquet file.
+
+```shell
+# read parquet and write geoparquet
+gpq convert non-geo.parquet valid-geo.parquet
+```
+
+When reading from a Parquet file and writing out GeoParquet, the input geometry values can be WKB or WKT encoded.  The output geometry values will always be WKB encoded.
+
 The `--compression` argument can be used to control the compression codec used when writing GeoParquet.  See `gpq convert --help` for the available options.
 
 
