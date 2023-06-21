@@ -126,7 +126,7 @@ func (c *ConvertCmd) Run() error {
 	}
 
 	var convertOptions *geoparquet.ConvertOptions
-	if c.InputPrimaryColumn != "geometry" {
+	if c.InputPrimaryColumn != geoparquet.DefaultGeometryColumn {
 		convertOptions = &geoparquet.ConvertOptions{
 			InputPrimaryColumn: c.InputPrimaryColumn,
 		}
