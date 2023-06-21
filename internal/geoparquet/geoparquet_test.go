@@ -232,6 +232,27 @@ func TestFromParquetWithoutMetadata(t *testing.T) {
 	assert.Equal(t, int64(1), geoparquetFile.NumRows())
 }
 
+func TestMetadataClone(t *testing.T) {
+	metadata := geoparquet.DefaultMetadata()
+	clone := metadata.Clone()
+
+	assert.Equal(t, metadata.PrimaryColumn, clone.PrimaryColumn)
+	clone.PrimaryColumn = "modified"
+	assert.NotEqual(t, metadata.PrimaryColumn, clone.PrimaryColumn)
+
+	assert.Equal(t, len(metadata.Columns), len(clone.Columns))
+
+	require.Contains(t, metadata.Columns, metadata.PrimaryColumn)
+	require.Contains(t, clone.Columns, metadata.PrimaryColumn)
+
+	originalColumn := metadata.Columns[metadata.PrimaryColumn]
+	cloneColumn := clone.Columns[metadata.PrimaryColumn]
+
+	assert.Equal(t, originalColumn.Encoding, cloneColumn.Encoding)
+	cloneColumn.Encoding = "modified"
+	assert.NotEqual(t, originalColumn.Encoding, cloneColumn.Encoding)
+}
+
 func TestFromParquetWithWKT(t *testing.T) {
 	type Row struct {
 		Name     string `parquet:"name"`
@@ -240,8 +261,12 @@ func TestFromParquetWithWKT(t *testing.T) {
 
 	rows := []*Row{
 		{
-			Name:     "test-point",
+			Name:     "test-point-1",
 			Geometry: string(wkt.Marshal(orb.Point{1, 2})),
+		},
+		{
+			Name:     "test-point-2",
+			Geometry: string(wkt.Marshal(orb.Point{3, 4})),
 		},
 	}
 
@@ -268,9 +293,9 @@ func TestFromParquetWithWKT(t *testing.T) {
 	assert.Contains(t, geometryTypes, "Point")
 
 	bounds := primaryColumnMetadata.Bounds
-	assert.Equal(t, []float64{1, 2, 1, 2}, bounds)
+	assert.Equal(t, []float64{1, 2, 3, 4}, bounds)
 
 	assert.Equal(t, geoparquet.EncodingWKB, primaryColumnMetadata.Encoding)
 
-	assert.Equal(t, int64(1), geoparquetFile.NumRows())
+	assert.Equal(t, int64(2), geoparquetFile.NumRows())
 }

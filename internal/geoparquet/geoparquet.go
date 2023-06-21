@@ -61,6 +61,16 @@ type Metadata struct {
 	Columns       map[string]*GeometryColumn `json:"columns"`
 }
 
+func (m *Metadata) Clone() *Metadata {
+	clone := &Metadata{}
+	*clone = *m
+	clone.Columns = make(map[string]*GeometryColumn, len(m.Columns))
+	for i, v := range m.Columns {
+		clone.Columns[i] = v.clone()
+	}
+	return clone
+}
+
 type GeometryColumn struct {
 	Encoding      string    `json:"encoding"`
 	GeometryType  any       `json:"geometry_type,omitempty"`
@@ -70,6 +80,14 @@ type GeometryColumn struct {
 	Orientation   string    `json:"orientation,omitempty"`
 	Bounds        []float64 `json:"bbox,omitempty"`
 	Epoch         float64   `json:"epoch,omitempty"`
+}
+
+func (g *GeometryColumn) clone() *GeometryColumn {
+	clone := &GeometryColumn{}
+	*clone = *g
+	clone.Bounds = make([]float64, len(g.Bounds))
+	copy(clone.Bounds, g.Bounds)
+	return clone
 }
 
 func (col *GeometryColumn) GetGeometryTypes() []string {
@@ -347,15 +365,16 @@ func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOp
 	boundsLookup := map[string]*orb.Bound{}
 	geometryTypeLookup := map[string]map[string]bool{}
 
-	metadata, metadataErr := GetMetadata(file)
+	inputMetadata, metadataErr := GetMetadata(file)
 	if metadataErr != nil {
-		metadata = &Metadata{
+		inputMetadata = &Metadata{
 			PrimaryColumn: defaultGeometryColumn,
 			Columns: map[string]*GeometryColumn{
 				defaultGeometryColumn: {},
 			},
 		}
 	}
+	outputMetadata := inputMetadata.Clone()
 
 	for {
 		row, err := reader.Next()
@@ -371,12 +390,12 @@ func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOp
 			return err
 		}
 
-		for name, columnMetadata := range metadata.Columns {
+		for name, inputColumn := range inputMetadata.Columns {
 			value, ok := properties[name]
 			if !ok {
 				return fmt.Errorf("missing geometry column: %s", name)
 			}
-			geometry, encoding, err := Geometry(value, name, metadata, schema)
+			geometry, encoding, err := Geometry(value, name, inputMetadata, schema)
 			if err != nil {
 				return err
 			}
@@ -393,8 +412,8 @@ func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOp
 				row[column.ColumnIndex] = parquet.ValueOf(geomBytes)
 			}
 
-			if columnMetadata.Encoding != EncodingWKB {
-				columnMetadata.Encoding = EncodingWKB
+			if inputColumn.Encoding != EncodingWKB {
+				outputMetadata.Columns[name].Encoding = EncodingWKB
 			}
 
 			bounds := geometry.Bound()
@@ -417,10 +436,10 @@ func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOp
 
 	for name, bounds := range boundsLookup {
 		if bounds != nil {
-			if metadata.Columns[name] == nil {
-				metadata.Columns[name] = getDefaultGeometryColumn()
+			if inputMetadata.Columns[name] == nil {
+				outputMetadata.Columns[name] = getDefaultGeometryColumn()
 			}
-			metadata.Columns[name].Bounds = []float64{
+			outputMetadata.Columns[name].Bounds = []float64{
 				bounds.Left(), bounds.Bottom(), bounds.Right(), bounds.Top(),
 			}
 		}
@@ -433,13 +452,13 @@ func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOp
 				geometryTypes = append(geometryTypes, geometryType)
 			}
 		}
-		if metadata.Columns[name] == nil {
-			metadata.Columns[name] = getDefaultGeometryColumn()
+		if inputMetadata.Columns[name] == nil {
+			outputMetadata.Columns[name] = getDefaultGeometryColumn()
 		}
-		metadata.Columns[name].GeometryTypes = geometryTypes
+		outputMetadata.Columns[name].GeometryTypes = geometryTypes
 	}
 
-	metadataBytes, jsonErr := json.Marshal(metadata)
+	metadataBytes, jsonErr := json.Marshal(outputMetadata)
 	if jsonErr != nil {
 		return fmt.Errorf("failed to serialize geo metadata: %w", jsonErr)
 	}
