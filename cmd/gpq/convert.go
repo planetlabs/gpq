@@ -33,7 +33,7 @@ type ConvertCmd struct {
 	Min                int    `help:"Minimum number of features to consider when building a schema." default:"10"`
 	Max                int    `help:"Maximum number of features to consider when building a schema." default:"100"`
 	InputPrimaryColumn string `help:"Primary geometry column name when reading Parquet withtout metadata." default:"geometry"`
-	Compression        string `help:"Parquet compression to use.  Possible values: ${enum}." enum:"uncompressed, snappy, gzip, brotli, zstd, lz4raw" default:"gzip"`
+	OutputCompression  string `help:"Parquet compression to use when writing.  Possible values: ${enum}." enum:"uncompressed, snappy, gzip, brotli, zstd, lz4raw, auto" default:"auto"`
 }
 
 type FormatType string
@@ -107,7 +107,13 @@ func (c *ConvertCmd) Run() error {
 		if outputFormat != ParquetType && outputFormat != GeoParquetType {
 			return errors.New("GeoJSON input can only be converted to GeoParquet")
 		}
-		convertOptions := &geojson.ConvertOptions{MinFeatures: c.Min, MaxFeatures: c.Max, Compression: c.Compression}
+		convertOptions := &geojson.ConvertOptions{
+			MinFeatures: c.Min,
+			MaxFeatures: c.Max,
+		}
+		if c.OutputCompression != "auto" {
+			convertOptions.Compression = c.OutputCompression
+		}
 		return geojson.ToParquet(input, output, convertOptions)
 	}
 
@@ -125,11 +131,11 @@ func (c *ConvertCmd) Run() error {
 		return geojson.FromParquet(file, output)
 	}
 
-	var convertOptions *geoparquet.ConvertOptions
-	if c.InputPrimaryColumn != geoparquet.DefaultGeometryColumn {
-		convertOptions = &geoparquet.ConvertOptions{
-			InputPrimaryColumn: c.InputPrimaryColumn,
-		}
+	convertOptions := &geoparquet.ConvertOptions{
+		InputPrimaryColumn: c.InputPrimaryColumn,
+	}
+	if c.OutputCompression != "auto" {
+		convertOptions.OutputCompression = c.OutputCompression
 	}
 	return geoparquet.FromParquet(file, output, convertOptions)
 }

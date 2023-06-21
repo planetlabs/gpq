@@ -71,7 +71,9 @@ When reading from a Parquet file and writing out GeoParquet, the input geometry 
 
 The `--input-primary-column` argument can be used to provide a primary geometry column name when reading Parquet files without "geo" metadata (defaults to `geometry`).
 
-The `--compression` argument can be used to control the compression codec used when writing GeoParquet.  See `gpq convert --help` for the available options.
+The `--output-compression` argument can be used to control the compression codec used when writing GeoParquet.
+
+See `gpq convert --help` for a full list of available options.
 
 
 ### describe

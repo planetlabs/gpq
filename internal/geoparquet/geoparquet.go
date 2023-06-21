@@ -331,7 +331,7 @@ func GetCodec(codec string) (compress.Codec, error) {
 
 type ConvertOptions struct {
 	InputPrimaryColumn string
-	Compression        string
+	OutputCompression  string
 }
 
 func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOptions) error {
@@ -343,8 +343,8 @@ func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOp
 	schema := file.Schema()
 
 	codec := schema.Compression()
-	if convertOptions.Compression != "" {
-		candidate, codecErr := GetCodec(convertOptions.Compression)
+	if convertOptions.OutputCompression != "" {
+		candidate, codecErr := GetCodec(convertOptions.OutputCompression)
 		if codecErr != nil {
 			return codecErr
 		}
