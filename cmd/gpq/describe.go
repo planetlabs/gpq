@@ -16,15 +16,21 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
+	"github.com/fatih/color"
 	"github.com/planetlabs/gpq/internal/geoparquet"
+	"github.com/rodaine/table"
 	"github.com/segmentio/parquet-go"
 )
 
 type DescribeCmd struct {
 	Input    string `arg:"" name:"input" help:"Path to a GeoParquet file." type:"existingfile"`
+	Format   string `help:"Report format.  Possible values: ${enum}." enum:"text, json" default:"text"`
 	Unpretty bool   `help:"No newlines or indentation in the JSON output."`
 }
 
@@ -47,11 +53,61 @@ func (c *DescribeCmd) Run() error {
 
 	metadata, geoErr := geoparquet.GetMetadata(file)
 	if geoErr != nil {
-		return geoErr
+		if !errors.Is(geoErr, geoparquet.ErrNoMetadata) {
+			return geoErr
+		}
 	}
 
+	schema := buildSchema("", file.Schema())
+	if c.Format == "json" {
+		return c.formatJSON(metadata, schema)
+	}
+	return c.formatText(metadata, schema)
+}
+
+func (c *DescribeCmd) formatText(metadata *geoparquet.Metadata, schema *Schema) error {
+	headerFmt := color.New(color.FgGreen, color.Underline).SprintfFunc()
+	columnFmt := color.New(color.FgYellow).SprintfFunc()
+
+	headers := []any{"Column", "Type", "Annotation", "Optional", "Repeated"}
+	if metadata != nil {
+		headers = append(headers, "Encoding", "Geometry Types", "Orientation", "Edges", "Bounds")
+	}
+
+	tbl := table.New(headers...)
+	tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
+
+	for _, field := range schema.Fields {
+		name := field.Name
+		row := []any{name, field.Type, field.Annotation, field.Optional, field.Repeated}
+		if metadata != nil {
+			geoColumn, ok := metadata.Columns[name]
+			if !ok {
+				row = append(row, "")
+			} else {
+				types := strings.Join(geoColumn.GetGeometryTypes(), ", ")
+				bounds := ""
+				if geoColumn.Bounds != nil {
+					values := make([]string, len(geoColumn.Bounds))
+					for i, v := range geoColumn.Bounds {
+						values[i] = strconv.FormatFloat(v, 'f', -1, 64)
+					}
+					bounds = fmt.Sprintf("[%s]", strings.Join(values, ", "))
+				}
+				row = append(row, geoColumn.Encoding, types, geoColumn.Orientation, geoColumn.Edges, bounds)
+			}
+		}
+
+		tbl.AddRow(row...)
+	}
+	tbl.Print()
+
+	return nil
+}
+
+func (c *DescribeCmd) formatJSON(metadata *geoparquet.Metadata, schema *Schema) error {
 	info := &Info{
-		Schema:   buildSchema("", file.Schema()),
+		Schema:   schema,
 		Metadata: metadata,
 	}
 
