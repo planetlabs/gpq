@@ -299,3 +299,50 @@ func TestFromParquetWithWKT(t *testing.T) {
 
 	assert.Equal(t, int64(2), geoparquetFile.NumRows())
 }
+
+func TestFromParquetWithAltPrimaryColumn(t *testing.T) {
+	type Row struct {
+		Name string `parquet:"name"`
+		Geo  string `parquet:"geo"`
+	}
+
+	rows := []*Row{
+		{
+			Name: "test-point-1",
+			Geo:  string(wkt.Marshal(orb.Point{1, 2})),
+		},
+		{
+			Name: "test-point-2",
+			Geo:  string(wkt.Marshal(orb.Point{3, 4})),
+		},
+	}
+
+	parquetFile, inputErr := makeParquet(rows, nil)
+	require.NoError(t, inputErr)
+
+	output := &bytes.Buffer{}
+	convertErr := geoparquet.FromParquet(parquetFile, output, &geoparquet.ConvertOptions{InputPrimaryColumn: "geo"})
+	require.NoError(t, convertErr)
+
+	geoparquetInput := bytes.NewReader(output.Bytes())
+	geoparquetFile, outputErr := parquet.OpenFile(geoparquetInput, geoparquetInput.Size())
+	require.NoError(t, outputErr)
+
+	metadata, geoErr := geoparquet.GetMetadata(geoparquetFile)
+	require.NoError(t, geoErr)
+
+	assert.Len(t, metadata.Columns, 1)
+
+	primaryColumnMetadata := metadata.Columns[metadata.PrimaryColumn]
+
+	geometryTypes := primaryColumnMetadata.GetGeometryTypes()
+	assert.Len(t, geometryTypes, 1)
+	assert.Contains(t, geometryTypes, "Point")
+
+	bounds := primaryColumnMetadata.Bounds
+	assert.Equal(t, []float64{1, 2, 3, 4}, bounds)
+
+	assert.Equal(t, geoparquet.EncodingWKB, primaryColumnMetadata.Encoding)
+
+	assert.Equal(t, int64(2), geoparquetFile.NumRows())
+}

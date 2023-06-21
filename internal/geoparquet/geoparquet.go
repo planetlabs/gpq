@@ -35,7 +35,7 @@ const (
 	EdgesPlanar                 = "planar"
 	EdgesSpherical              = "spherical"
 	OrientationCounterClockwise = "counterclockwise"
-	defaultGeometryColumn       = "geometry"
+	DefaultGeometryColumn       = "geometry"
 )
 
 var GeometryTypes = []string{
@@ -134,9 +134,9 @@ func getDefaultGeometryColumn() *GeometryColumn {
 func DefaultMetadata() *Metadata {
 	return &Metadata{
 		Version:       Version,
-		PrimaryColumn: defaultGeometryColumn,
+		PrimaryColumn: DefaultGeometryColumn,
 		Columns: map[string]*GeometryColumn{
-			defaultGeometryColumn: getDefaultGeometryColumn(),
+			DefaultGeometryColumn: getDefaultGeometryColumn(),
 		},
 	}
 }
@@ -330,7 +330,8 @@ func GetCodec(codec string) (compress.Codec, error) {
 }
 
 type ConvertOptions struct {
-	Compression string
+	InputPrimaryColumn string
+	Compression        string
 }
 
 func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOptions) error {
@@ -367,10 +368,14 @@ func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOp
 
 	inputMetadata, metadataErr := GetMetadata(file)
 	if metadataErr != nil {
+		primaryColumn := DefaultGeometryColumn
+		if convertOptions.InputPrimaryColumn != "" {
+			primaryColumn = convertOptions.InputPrimaryColumn
+		}
 		inputMetadata = &Metadata{
-			PrimaryColumn: defaultGeometryColumn,
+			PrimaryColumn: primaryColumn,
 			Columns: map[string]*GeometryColumn{
-				defaultGeometryColumn: {},
+				primaryColumn: {},
 			},
 		}
 	}
