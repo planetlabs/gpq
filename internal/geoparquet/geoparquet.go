@@ -330,7 +330,8 @@ func GetCodec(codec string) (compress.Codec, error) {
 }
 
 type ConvertOptions struct {
-	Compression string
+	InputPrimaryColumn string
+	Compression        string
 }
 
 func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOptions) error {
@@ -367,10 +368,14 @@ func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOp
 
 	inputMetadata, metadataErr := GetMetadata(file)
 	if metadataErr != nil {
+		primaryColumn := defaultGeometryColumn
+		if convertOptions.InputPrimaryColumn != "" {
+			primaryColumn = convertOptions.InputPrimaryColumn
+		}
 		inputMetadata = &Metadata{
-			PrimaryColumn: defaultGeometryColumn,
+			PrimaryColumn: primaryColumn,
 			Columns: map[string]*GeometryColumn{
-				defaultGeometryColumn: {},
+				primaryColumn: {},
 			},
 		}
 	}
