@@ -71,11 +71,39 @@ func (m *Metadata) Clone() *Metadata {
 	return clone
 }
 
+type ProjId struct {
+	Authority string `json:"authority"`
+	Code      any    `json:"code"`
+}
+
+type Proj struct {
+	Name string  `json:"name"`
+	Id   *ProjId `json:"id"`
+}
+
+func (p *Proj) String() string {
+	id := ""
+	if p.Id != nil {
+		if code, ok := p.Id.Code.(string); ok {
+			id = p.Id.Authority + ":" + code
+		} else if code, ok := p.Id.Code.(float64); ok {
+			id = fmt.Sprintf("%s:%g", p.Id.Authority, code)
+		}
+	}
+	if p.Name != "" {
+		return p.Name
+	}
+	if id == "" {
+		return "Unknown"
+	}
+	return id
+}
+
 type GeometryColumn struct {
 	Encoding      string    `json:"encoding"`
 	GeometryType  any       `json:"geometry_type,omitempty"`
 	GeometryTypes any       `json:"geometry_types"`
-	CRS           any       `json:"crs,omitempty"`
+	CRS           *Proj     `json:"crs,omitempty"`
 	Edges         string    `json:"edges,omitempty"`
 	Orientation   string    `json:"orientation,omitempty"`
 	Bounds        []float64 `json:"bbox,omitempty"`
