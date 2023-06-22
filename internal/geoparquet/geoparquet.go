@@ -368,9 +368,9 @@ func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOp
 	}
 	reader := NewRowReader(file)
 
-	schema := file.Schema()
+	inputSchema := file.Schema()
 
-	codec := schema.Compression()
+	codec := inputSchema.Compression()
 	if convertOptions.Compression != "" {
 		candidate, codecErr := GetCodec(convertOptions.Compression)
 		if codecErr != nil {
@@ -378,18 +378,6 @@ func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOp
 		}
 		codec = candidate
 	}
-
-	options := []parquet.WriterOption{
-		parquet.Compression(codec),
-		schema,
-	}
-
-	writerConfig, configErr := parquet.NewWriterConfig(options...)
-	if configErr != nil {
-		return configErr
-	}
-
-	writer := parquet.NewGenericWriter[any](output, writerConfig)
 
 	boundsLookup := map[string]*orb.Bound{}
 	geometryTypeLookup := map[string]map[string]bool{}
@@ -401,12 +389,31 @@ func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOp
 			primaryColumn = convertOptions.InputPrimaryColumn
 		}
 		inputMetadata = &Metadata{
+			Version:       Version,
 			PrimaryColumn: primaryColumn,
 			Columns: map[string]*GeometryColumn{
 				primaryColumn: {},
 			},
 		}
 	}
+
+	outputSchema, schemaErr := TransformSchema(inputSchema, stringToBinaryFieldTransform(inputMetadata))
+	if schemaErr != nil {
+		return schemaErr
+	}
+
+	options := []parquet.WriterOption{
+		parquet.Compression(codec),
+		outputSchema,
+	}
+
+	writerConfig, configErr := parquet.NewWriterConfig(options...)
+	if configErr != nil {
+		return configErr
+	}
+
+	writer := parquet.NewGenericWriter[any](output, writerConfig)
+
 	outputMetadata := inputMetadata.Clone()
 
 	for {
@@ -419,7 +426,7 @@ func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOp
 		}
 
 		properties := map[string]any{}
-		if err := schema.Reconstruct(&properties, row); err != nil {
+		if err := inputSchema.Reconstruct(&properties, row); err != nil {
 			return err
 		}
 
@@ -428,13 +435,13 @@ func FromParquet(file *parquet.File, output io.Writer, convertOptions *ConvertOp
 			if !ok {
 				return fmt.Errorf("missing geometry column: %s", name)
 			}
-			geometry, encoding, err := Geometry(value, name, inputMetadata, schema)
+			geometry, encoding, err := Geometry(value, name, inputMetadata, inputSchema)
 			if err != nil {
 				return err
 			}
 
 			if encoding != EncodingWKB {
-				column, ok := schema.Lookup(name)
+				column, ok := inputSchema.Lookup(name)
 				if !ok {
 					return fmt.Errorf("missing geometry column: %s", name)
 				}
