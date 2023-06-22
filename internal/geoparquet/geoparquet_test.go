@@ -79,6 +79,12 @@ func TestGetMetadataV100Beta1(t *testing.T) {
 	assert.Equal(t, "planar", col.Edges)
 	assert.Equal(t, []float64{-180, -90, 180, 83.6451}, col.Bounds)
 	assert.Equal(t, []string{"Polygon", "MultiPolygon"}, col.GetGeometryTypes())
+
+	require.NotNil(t, col.CRS)
+	require.NotNil(t, col.CRS.Id)
+	assert.Equal(t, "OGC", col.CRS.Id.Authority)
+	assert.Equal(t, "CRS84", col.CRS.Id.Code)
+	assert.Equal(t, "WGS 84 (CRS84)", col.CRS.Name)
 }
 
 func TestRowReaderV040(t *testing.T) {
