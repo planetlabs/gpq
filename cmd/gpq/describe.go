@@ -22,9 +22,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fatih/color"
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/planetlabs/gpq/internal/geoparquet"
-	"github.com/rodaine/table"
 	"github.com/segmentio/parquet-go"
 )
 
@@ -59,58 +58,69 @@ func (c *DescribeCmd) Run() error {
 	}
 
 	schema := buildSchema("", file.Schema())
-	if c.Format == "json" {
-		return c.formatJSON(metadata, schema)
+
+	info := &Info{
+		Schema:   schema,
+		Metadata: metadata,
+		NumRows:  file.NumRows(),
 	}
-	return c.formatText(metadata, schema)
+
+	if c.Format == "json" {
+		return c.formatJSON(info)
+	}
+	return c.formatText(info)
 }
 
-func (c *DescribeCmd) formatText(metadata *geoparquet.Metadata, schema *Schema) error {
-	headerFmt := color.New(color.FgGreen, color.Underline).SprintfFunc()
-	columnFmt := color.New(color.FgYellow).SprintfFunc()
+func (c *DescribeCmd) formatText(info *Info) error {
+	metadata := info.Metadata
 
-	headers := []any{"Column", "Type", "Annotation", "Optional", "Repeated"}
+	header := table.Row{"Column", "Type", "Annotation", "Optional", "Repeated"}
 	if metadata != nil {
-		headers = append(headers, "Encoding", "Geometry Types", "Orientation", "Edges", "Bounds")
+		header = append(header, "Encoding", "Geometry Types", "Orientation", "Edges", "Bounds")
 	}
 
-	tbl := table.New(headers...)
-	tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
+	tbl := table.NewWriter()
+	tbl.SetOutputMirror(os.Stdout)
+	tbl.AppendHeader(header)
 
-	for _, field := range schema.Fields {
+	for _, field := range info.Schema.Fields {
 		name := field.Name
-		row := []any{name, field.Type, field.Annotation, field.Optional, field.Repeated}
+		if metadata != nil && metadata.PrimaryColumn == name {
+			name += " *"
+		}
+		row := table.Row{name, field.Type, field.Annotation, field.Optional, field.Repeated}
 		if metadata != nil {
-			geoColumn, ok := metadata.Columns[name]
+			geoColumn, ok := metadata.Columns[field.Name]
 			if !ok {
 				row = append(row, "")
 			} else {
-				types := strings.Join(geoColumn.GetGeometryTypes(), ", ")
+				types := strings.Join(geoColumn.GetGeometryTypes(), ",\n")
 				bounds := ""
 				if geoColumn.Bounds != nil {
 					values := make([]string, len(geoColumn.Bounds))
 					for i, v := range geoColumn.Bounds {
 						values[i] = strconv.FormatFloat(v, 'f', -1, 64)
 					}
-					bounds = fmt.Sprintf("[%s]", strings.Join(values, ", "))
+					bounds = fmt.Sprintf("[%s]", strings.Join(values, ",\n"))
 				}
 				row = append(row, geoColumn.Encoding, types, geoColumn.Orientation, geoColumn.Edges, bounds)
 			}
 		}
 
-		tbl.AddRow(row...)
+		tbl.AppendRow(row)
 	}
-	tbl.Print()
+	tbl.SetStyle(table.StyleRounded)
+	tbl.Render()
 
+	plural := "s"
+	if info.NumRows == 1 {
+		plural = ""
+	}
+	fmt.Printf("%d row%s\n", info.NumRows, plural)
 	return nil
 }
 
-func (c *DescribeCmd) formatJSON(metadata *geoparquet.Metadata, schema *Schema) error {
-	info := &Info{
-		Schema:   schema,
-		Metadata: metadata,
-	}
-
+func (c *DescribeCmd) formatJSON(info *Info) error {
 	encoder := json.NewEncoder(os.Stdout)
 	if !c.Unpretty {
 		encoder.SetIndent("", "  ")
@@ -126,6 +136,7 @@ func (c *DescribeCmd) formatJSON(metadata *geoparquet.Metadata, schema *Schema) 
 type Info struct {
 	Schema   *Schema              `json:"schema"`
 	Metadata *geoparquet.Metadata `json:"metadata"`
+	NumRows  int64                `json:"rows"`
 }
 
 type Schema struct {
