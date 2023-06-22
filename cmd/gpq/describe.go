@@ -23,8 +23,10 @@ import (
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/planetlabs/gpq/internal/geoparquet"
 	"github.com/segmentio/parquet-go"
+	"golang.org/x/term"
 )
 
 type DescribeCmd struct {
@@ -32,6 +34,17 @@ type DescribeCmd struct {
 	Format   string `help:"Report format.  Possible values: ${enum}." enum:"text, json" default:"text"`
 	Unpretty bool   `help:"No newlines or indentation in the JSON output."`
 }
+
+const (
+	ColName          = "Column"
+	ColType          = "Type"
+	ColAnnotation    = "Annotation"
+	ColRepetition    = "Repetition"
+	ColEncoding      = "Encoding"
+	ColGeometryTypes = "Geometry Types"
+	ColBounds        = "Bounds"
+	ColDetail        = "Detail"
+)
 
 func (c *DescribeCmd) Run() error {
 	input, readErr := os.Open(c.Input)
@@ -74,50 +87,100 @@ func (c *DescribeCmd) Run() error {
 func (c *DescribeCmd) formatText(info *Info) error {
 	metadata := info.Metadata
 
-	header := table.Row{"Column", "Type", "Annotation", "Optional", "Repeated"}
+	header := table.Row{ColName, ColType, ColAnnotation, ColRepetition}
+	columnConfigs := []table.ColumnConfig{}
 	if metadata != nil {
-		header = append(header, "Encoding", "Geometry Types", "Orientation", "Edges", "Bounds")
+		header = append(header, ColEncoding, ColGeometryTypes, ColBounds, ColDetail)
+		columnConfigs = append(columnConfigs, table.ColumnConfig{
+			Name:             ColGeometryTypes,
+			WidthMax:         50,
+			WidthMaxEnforcer: text.WrapSoft,
+		}, table.ColumnConfig{
+			Name:             ColBounds,
+			WidthMax:         50,
+			WidthMaxEnforcer: text.WrapSoft,
+		})
 	}
 
+	out := os.Stdout
 	tbl := table.NewWriter()
-	tbl.SetOutputMirror(os.Stdout)
+	if term.IsTerminal(int(out.Fd())) {
+		width, _, err := term.GetSize(int(out.Fd()))
+		if err == nil {
+			tbl.SetAllowedRowLength(width)
+		}
+	}
+
+	tbl.SetColumnConfigs(columnConfigs)
 	tbl.AppendHeader(header)
 
 	for _, field := range info.Schema.Fields {
 		name := field.Name
 		if metadata != nil && metadata.PrimaryColumn == name {
-			name += " *"
+			name = text.Bold.Sprint(name)
 		}
-		row := table.Row{name, field.Type, field.Annotation, field.Optional, field.Repeated}
+		repetition := "1"
+		if field.Repeated {
+			repetition = "0..*"
+		} else if field.Optional {
+			repetition = "0..1"
+		}
+		row := table.Row{name, field.Type, field.Annotation, repetition}
 		if metadata != nil {
 			geoColumn, ok := metadata.Columns[field.Name]
 			if !ok {
 				row = append(row, "")
 			} else {
-				types := strings.Join(geoColumn.GetGeometryTypes(), ",\n")
+				types := strings.Join(geoColumn.GetGeometryTypes(), ", ")
 				bounds := ""
 				if geoColumn.Bounds != nil {
 					values := make([]string, len(geoColumn.Bounds))
 					for i, v := range geoColumn.Bounds {
 						values[i] = strconv.FormatFloat(v, 'f', -1, 64)
 					}
-					bounds = fmt.Sprintf("[%s]", strings.Join(values, ",\n"))
+					bounds = fmt.Sprintf("[%s]", strings.Join(values, ", "))
 				}
-				row = append(row, geoColumn.Encoding, types, geoColumn.Orientation, geoColumn.Edges, bounds)
+				details := table.NewWriter()
+				details.SetStyle(table.StyleLight)
+				details.Style().Options.DrawBorder = false
+				if geoColumn.Orientation != "" {
+					details.AppendRow(table.Row{"orientation", geoColumn.Orientation})
+				}
+				if geoColumn.Edges != "" {
+					details.AppendRow(table.Row{"edges", geoColumn.Edges})
+				}
+				if geoColumn.CRS != nil {
+					details.AppendRow(table.Row{"crs", geoColumn.CRS})
+				}
+				row = append(row, geoColumn.Encoding, types, bounds, details.Render())
 			}
 		}
 
 		tbl.AppendRow(row)
 	}
+
+	tbl.AppendFooter(makeFooter("Rows", info.NumRows, header), table.RowConfig{AutoMerge: true})
+	if metadata != nil {
+		version := metadata.Version
+		if version == "" {
+			version = "missing"
+		}
+		tbl.AppendFooter(makeFooter("Version", version, header), table.RowConfig{AutoMerge: true, AutoMergeAlign: text.AlignLeft})
+	}
+
 	tbl.SetStyle(table.StyleRounded)
+	tbl.SetOutputMirror(out)
 	tbl.Render()
 
-	plural := "s"
-	if info.NumRows == 1 {
-		plural = ""
-	}
-	fmt.Printf("%d row%s\n", info.NumRows, plural)
 	return nil
+}
+
+func makeFooter(key string, value any, header table.Row) table.Row {
+	row := table.Row{key, value}
+	for i := len(row); i < len(header); i += 1 {
+		row = append(row, "")
+	}
+	return row
 }
 
 func (c *DescribeCmd) formatJSON(info *Info) error {

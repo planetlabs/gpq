@@ -11,6 +11,7 @@ require (
 	github.com/segmentio/encoding v0.3.6
 	github.com/segmentio/parquet-go v0.0.0-20230605165518-1fd7f3303070
 	github.com/stretchr/testify v1.8.4
+	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 )
 
 require (
