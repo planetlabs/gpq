@@ -30,7 +30,7 @@ jobs:
       - name: Build WASM
         run: make wasm
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v2
         with:
           path: web
       - name: Deploy to GitHub Pages
