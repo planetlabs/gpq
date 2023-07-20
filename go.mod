@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/kong v0.8.0
 	github.com/fatih/color v1.15.0
 	github.com/jedib0t/go-pretty/v6 v6.4.6
-	github.com/paulmach/orb v0.9.2
+	github.com/paulmach/orb v0.10.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.0
 	github.com/segmentio/encoding v0.3.6
 	github.com/segmentio/parquet-go v0.0.0-20230605165518-1fd7f3303070
