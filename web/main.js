@@ -247,7 +247,7 @@ class Upload extends LitElement {
           @change="${this._handleChange}"
           type="file"
           type="file"
-          accept=".parquet, .geojson, .json, application/json"
+          accept=".parquet, .geoparquet, .geojson, .json, application/json"
           aria-label="File upload"
         />
         <span class="file-custom"></span>
@@ -379,7 +379,7 @@ class Converter extends LitElement {
 
     this._working = `Converting ${file.name} (${formatSize(file.size)})...`;
     try {
-      if (file.name.endsWith('.parquet')) {
+      if (file.name.endsWith('parquet')) {
         output = fromParquet(await getParquetData(file));
         extension = '.geojson';
         blobOptions = {type: 'application/geo+json'};
@@ -394,7 +394,9 @@ class Converter extends LitElement {
         const plural = output.records === 1 ? '' : 's';
         summary = `${output.records} row${plural}, ${size}`;
       } else {
-        throw new Error('Only works with .parquet, .geojson, and .json files');
+        throw new Error(
+          'Only works with .parquet, .geoparquet, .geojson, and .json files'
+        );
       }
     } catch (err) {
       this._error = err;
