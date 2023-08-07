@@ -11,7 +11,7 @@ require (
 	github.com/segmentio/encoding v0.3.6
 	github.com/segmentio/parquet-go v0.0.0-20230605165518-1fd7f3303070
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/term v0.10.0
+	golang.org/x/term v0.11.0
 )
 
 require (
@@ -29,6 +29,6 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
 	go.mongodb.org/mongo-driver v1.11.4 // indirect
-	golang.org/x/sys v0.10.0 // indirect
+	golang.org/x/sys v0.11.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
