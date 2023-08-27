@@ -66,12 +66,12 @@
       "passed": true
     },
     {
-      "title": "geometry columns must be stored using the BYTE_ARRAY parquet type",
+      "title": "geometry columns must not be grouped",
       "run": true,
       "passed": true
     },
     {
-      "title": "geometry columns must not be grouped",
+      "title": "geometry columns must be stored using the BYTE_ARRAY parquet type",
       "run": true,
       "passed": true
     },

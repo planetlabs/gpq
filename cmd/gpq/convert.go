@@ -22,7 +22,6 @@ import (
 
 	"github.com/planetlabs/gpq/internal/geojson"
 	"github.com/planetlabs/gpq/internal/geoparquet"
-	"github.com/segmentio/parquet-go"
 )
 
 type ConvertCmd struct {
@@ -33,7 +32,7 @@ type ConvertCmd struct {
 	Min                int    `help:"Minimum number of features to consider when building a schema." default:"10"`
 	Max                int    `help:"Maximum number of features to consider when building a schema." default:"100"`
 	InputPrimaryColumn string `help:"Primary geometry column name when reading Parquet withtout metadata." default:"geometry"`
-	Compression        string `help:"Parquet compression to use.  Possible values: ${enum}." enum:"uncompressed, snappy, gzip, brotli, zstd, lz4raw" default:"gzip"`
+	Compression        string `help:"Parquet compression to use.  Possible values: ${enum}." enum:"uncompressed, snappy, gzip, brotli, zstd" default:"zstd"`
 }
 
 type FormatType string
@@ -111,18 +110,8 @@ func (c *ConvertCmd) Run() error {
 		return geojson.ToParquet(input, output, convertOptions)
 	}
 
-	stat, statErr := os.Stat(c.Input)
-	if statErr != nil {
-		return fmt.Errorf("failed to get size of %q: %w", c.Input, statErr)
-	}
-
-	file, fileErr := parquet.OpenFile(input, stat.Size())
-	if fileErr != nil {
-		return fileErr
-	}
-
 	if outputFormat == GeoJSONType {
-		return geojson.FromParquet(file, output)
+		return geojson.FromParquet(input, output)
 	}
 
 	var convertOptions *geoparquet.ConvertOptions
@@ -131,5 +120,6 @@ func (c *ConvertCmd) Run() error {
 			InputPrimaryColumn: c.InputPrimaryColumn,
 		}
 	}
-	return geoparquet.FromParquet(file, output, convertOptions)
+
+	return geoparquet.FromParquet(input, output, convertOptions)
 }

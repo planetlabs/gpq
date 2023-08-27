@@ -19,10 +19,13 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/apache/arrow/go/v14/parquet"
+	"github.com/apache/arrow/go/v14/parquet/file"
+	"github.com/apache/arrow/go/v14/parquet/schema"
 	"github.com/paulmach/orb"
+	"github.com/planetlabs/gpq/internal/geo"
 	"github.com/planetlabs/gpq/internal/geoparquet"
 	"github.com/santhosh-tekuri/jsonschema/v5"
-	"github.com/segmentio/parquet-go"
 )
 
 type MetadataMap map[string]any
@@ -30,19 +33,12 @@ type MetadataMap map[string]any
 type ColumnMetdataMap map[string]map[string]any
 
 type FileInfo struct {
-	File     *parquet.File
+	File     *file.Reader
 	Metadata *geoparquet.Metadata
 }
 
 type RuleData interface {
-	*parquet.File | MetadataMap | ColumnMetdataMap | *FileInfo
-}
-
-type EncodedGeometryMap map[string]any
-type DecodedGeometryMap map[string]orb.Geometry
-
-type RowData interface {
-	EncodedGeometryMap | DecodedGeometryMap
+	*file.Reader | MetadataMap | ColumnMetdataMap | *FileInfo
 }
 
 type Rule interface {
@@ -73,7 +69,7 @@ type GenericRule[T RuleData] struct {
 	validate func(T) error
 }
 
-var _ Rule = (*GenericRule[*parquet.File])(nil)
+var _ Rule = (*GenericRule[*file.Reader])(nil)
 
 func (r *GenericRule[T]) Title() string {
 	return r.title
@@ -87,31 +83,31 @@ func (r *GenericRule[T]) Validate() error {
 	return r.validate(r.value)
 }
 
-type RowRule[T RowData] struct {
+type ColumnValueRule[T any] struct {
 	title string
-	row   func(*FileInfo, T) error
+	value func(*FileInfo, string, T) error
 	info  *FileInfo
 	err   error
 }
 
-var _ Rule = (*RowRule[EncodedGeometryMap])(nil)
+var _ Rule = (*ColumnValueRule[*string])(nil)
 
-func (r *RowRule[T]) Title() string {
+func (r *ColumnValueRule[T]) Title() string {
 	return r.title
 }
 
-func (r *RowRule[T]) Init(info *FileInfo) {
+func (r *ColumnValueRule[T]) Init(info *FileInfo) {
 	r.info = info
 }
 
-func (r *RowRule[T]) Row(data T) error {
+func (r *ColumnValueRule[T]) Value(name string, data T) error {
 	if r.err == nil {
-		r.err = r.row(r.info, data)
+		r.err = r.value(r.info, name, data)
 	}
 	return r.err
 }
 
-func (r *RowRule[T]) Validate() error {
+func (r *ColumnValueRule[T]) Validate() error {
 	return r.err
 }
 
@@ -124,11 +120,11 @@ func asJSON(value any) string {
 }
 
 func RequiredGeoKey() Rule {
-	return &GenericRule[*parquet.File]{
+	return &GenericRule[*file.Reader]{
 		title: fmt.Sprintf("file must include a %q metadata key", geoparquet.MetadataKey),
-		validate: func(file *parquet.File) error {
-			_, ok := file.Lookup(geoparquet.MetadataKey)
-			if !ok {
+		validate: func(file *file.Reader) error {
+			kv := file.MetaData().KeyValueMetadata()
+			if kv.FindValue(geoparquet.MetadataKey) == nil {
 				return fatal("missing %q metadata key", geoparquet.MetadataKey)
 			}
 			return nil
@@ -137,10 +133,10 @@ func RequiredGeoKey() Rule {
 }
 
 func RequiredMetadataType() Rule {
-	return &GenericRule[*parquet.File]{
+	return &GenericRule[*file.Reader]{
 		title: "metadata must be a JSON object",
-		validate: func(file *parquet.File) error {
-			value, geoErr := geoparquet.GetMetadataValue(file)
+		validate: func(file *file.Reader) error {
+			value, geoErr := geoparquet.GetMetadataValue(file.MetaData().KeyValueMetadata())
 			if geoErr != nil {
 				return fatal(geoErr.Error())
 			}
@@ -228,7 +224,7 @@ func RequiredColumnEncoding() Rule {
 				if !ok {
 					return fmt.Errorf(`expected "encoding" for column %q to be a string, got %s`, name, asJSON(meta["encoding"]))
 				}
-				if encoding != geoparquet.EncodingWKB {
+				if encoding != geoparquet.DefaultGeometryEncoding {
 					return fmt.Errorf(`unsupported encoding %q for column %q`, encoding, name)
 				}
 			}
@@ -431,19 +427,20 @@ func PrimaryColumnInLookup() Rule {
 	}
 }
 
-func GeometryDataType() Rule {
+func GeometryUngrouped() Rule {
 	return &GenericRule[*FileInfo]{
-		title: "geometry columns must be stored using the BYTE_ARRAY parquet type",
+		title: "geometry columns must not be grouped",
 		validate: func(info *FileInfo) error {
 			metadata := info.Metadata
-			schema := info.File.Schema()
+			sc := info.File.MetaData().Schema
 			for name := range metadata.Columns {
-				column, ok := schema.Lookup(name)
-				if !ok {
+				index := sc.ColumnIndexByName(name)
+				if index < 0 {
 					return fatal("missing geometry column %q", name)
 				}
-				if column.Node.Type() != parquet.ByteArrayType {
-					return fatal("unexpected type for column %q, got %s", name, column.Node.Type())
+				_, ok := sc.Root().Field(index).(*schema.PrimitiveNode)
+				if !ok {
+					return fmt.Errorf("column %q must not be a group", name)
 				}
 			}
 
@@ -452,19 +449,24 @@ func GeometryDataType() Rule {
 	}
 }
 
-func GeometryUngrouped() Rule {
+func GeometryDataType() Rule {
 	return &GenericRule[*FileInfo]{
-		title: "geometry columns must not be grouped",
+		title: "geometry columns must be stored using the BYTE_ARRAY parquet type",
 		validate: func(info *FileInfo) error {
 			metadata := info.Metadata
-			schema := info.File.Schema()
+			sc := info.File.MetaData().Schema
 			for name := range metadata.Columns {
-				column, ok := schema.Lookup(name)
-				if !ok {
+				index := sc.ColumnIndexByName(name)
+				if index < 0 {
 					return fatal("missing geometry column %q", name)
 				}
-				if !column.Node.Leaf() {
-					return fmt.Errorf("column %q must not be a group", name)
+
+				field, ok := sc.Root().Field(index).(*schema.PrimitiveNode)
+				if !ok {
+					return fatal("expected primitive column for %q", name)
+				}
+				if field.PhysicalType() != parquet.Types.ByteArray {
+					return fatal("unexpected type for column %q, got %s", name, field.PhysicalType())
 				}
 			}
 
@@ -478,16 +480,18 @@ func GeometryRepetition() Rule {
 		title: "geometry columns must be required or optional, not repeated",
 		validate: func(info *FileInfo) error {
 			metadata := info.Metadata
-			schema := info.File.Schema()
+			sc := info.File.MetaData().Schema
 			for name := range metadata.Columns {
-				column, ok := schema.Lookup(name)
-				if !ok {
+				index := sc.ColumnIndexByName(name)
+				if index < 0 {
 					return fatal("missing geometry column %q", name)
 				}
-				if column.Node.Repeated() {
+
+				repetitionType := sc.Root().Field(index).RepetitionType()
+				if repetitionType == parquet.Repetitions.Repeated {
 					return fmt.Errorf("column %q must not be repeated", name)
 				}
-				if !column.Node.Required() && !column.Node.Optional() {
+				if repetitionType != parquet.Repetitions.Required && repetitionType != parquet.Repetitions.Optional {
 					return fmt.Errorf("column %q must be required or optional", name)
 				}
 			}
@@ -498,17 +502,16 @@ func GeometryRepetition() Rule {
 }
 
 func GeometryEncoding() Rule {
-	return &RowRule[EncodedGeometryMap]{
+	return &ColumnValueRule[any]{
 		title: `all geometry values match the "encoding" metadata`,
-		row: func(info *FileInfo, geometries EncodedGeometryMap) error {
-			schema := info.File.Schema()
-			metadata := info.Metadata
-
-			for name, encoded := range geometries {
-				_, _, err := geoparquet.Geometry(encoded, name, metadata, schema)
-				if err != nil {
-					return fatal("invalid geometry in column %q: %s", name, err)
-				}
+		value: func(info *FileInfo, name string, data any) error {
+			geomColumn := info.Metadata.Columns[name]
+			if geomColumn == nil {
+				return fatal("missing geometry column %q", name)
+			}
+			_, err := geo.DecodeGeometry(data, geomColumn.Encoding)
+			if err != nil {
+				return fatal("invalid geometry in column %q: %s", name, err)
 			}
 
 			return nil
@@ -517,31 +520,28 @@ func GeometryEncoding() Rule {
 }
 
 func GeometryTypes() Rule {
-	return &RowRule[DecodedGeometryMap]{
+	return &ColumnValueRule[orb.Geometry]{
 		title: `all geometry types must be included in the "geometry_types" metadata (if not empty)`,
-		row: func(info *FileInfo, geometries DecodedGeometryMap) error {
-			metadata := info.Metadata
+		value: func(info *FileInfo, name string, geometry orb.Geometry) error {
+			geomColumn := info.Metadata.Columns[name]
+			if geomColumn == nil {
+				return fatal("missing geometry column %q", name)
+			}
 
-			for name, geometry := range geometries {
-				meta, ok := metadata.Columns[name]
-				if !ok {
-					return fatal("missing metadata for column %q", name)
+			geometryTypes := geomColumn.GetGeometryTypes()
+			if len(geometryTypes) == 0 {
+				return nil
+			}
+			actualType := geometry.GeoJSONType()
+			included := false
+			for _, expectedType := range geometryTypes {
+				if actualType == expectedType || actualType+" Z" == expectedType {
+					included = true
+					break
 				}
-				geometryTypes := meta.GetGeometryTypes()
-				if len(geometryTypes) == 0 {
-					continue
-				}
-				actualType := geometry.GeoJSONType()
-				included := false
-				for _, expectedType := range geometryTypes {
-					if actualType == expectedType || actualType+" Z" == expectedType {
-						included = true
-						break
-					}
-				}
-				if !included {
-					return fmt.Errorf("unexpected geometry type %q for column %q", actualType, name)
-				}
+			}
+			if !included {
+				return fmt.Errorf("unexpected geometry type %q for column %q", actualType, name)
 			}
 
 			return nil
@@ -550,41 +550,38 @@ func GeometryTypes() Rule {
 }
 
 func GeometryOrientation() Rule {
-	return &RowRule[DecodedGeometryMap]{
+	return &ColumnValueRule[orb.Geometry]{
 		title: `all polygon geometries must follow the "orientation" metadata (if present)`,
-		row: func(info *FileInfo, geometries DecodedGeometryMap) error {
-			metadata := info.Metadata
+		value: func(info *FileInfo, name string, geometry orb.Geometry) error {
+			geomColumn := info.Metadata.Columns[name]
+			if geomColumn == nil {
+				return fatal("missing geometry column %q", name)
+			}
 
-			for name, geometry := range geometries {
-				meta, ok := metadata.Columns[name]
-				if !ok {
-					return fatal("missing metadata for column %q", name)
-				}
-				if meta.Orientation == "" {
+			if geomColumn.Orientation == "" {
+				return nil
+			}
+			if geomColumn.Orientation != geoparquet.OrientationCounterClockwise {
+				return fmt.Errorf("unsupported orientation %q for column %q", geomColumn.Orientation, name)
+			}
+			polygon, ok := geometry.(orb.Polygon)
+			if !ok {
+				return nil
+			}
+
+			expectedExterior := orb.CCW
+			expectedInterior := orb.CW
+
+			for i, ring := range polygon {
+				orientation := ring.Orientation()
+				if i == 0 {
+					if orientation != expectedExterior {
+						return fmt.Errorf("invalid orientation for exterior ring in column %q", name)
+					}
 					continue
 				}
-				if meta.Orientation != geoparquet.OrientationCounterClockwise {
-					return fmt.Errorf("unsupported orientation %q for column %q", meta.Orientation, name)
-				}
-				polygon, ok := geometry.(orb.Polygon)
-				if !ok {
-					continue
-				}
-
-				expectedExterior := orb.CCW
-				expectedInterior := orb.CW
-
-				for i, ring := range polygon {
-					orientation := ring.Orientation()
-					if i == 0 {
-						if orientation != expectedExterior {
-							return fmt.Errorf("invalid orientation for exterior ring in column %q", name)
-						}
-						continue
-					}
-					if orientation != expectedInterior {
-						return fmt.Errorf("invalid orientation for interior ring in column %q", name)
-					}
+				if orientation != expectedInterior {
+					return fmt.Errorf("invalid orientation for interior ring in column %q", name)
 				}
 			}
 
@@ -594,63 +591,60 @@ func GeometryOrientation() Rule {
 }
 
 func GeometryBounds() Rule {
-	return &RowRule[DecodedGeometryMap]{
+	return &ColumnValueRule[orb.Geometry]{
 		title: `all geometries must fall within the "bbox" metadata (if present)`,
-		row: func(info *FileInfo, geometries DecodedGeometryMap) error {
-			metadata := info.Metadata
+		value: func(info *FileInfo, name string, geometry orb.Geometry) error {
+			geomColumn := info.Metadata.Columns[name]
+			if geomColumn == nil {
+				return fatal("missing geometry column %q", name)
+			}
 
-			for name, geometry := range geometries {
-				meta, ok := metadata.Columns[name]
-				if !ok {
-					return fatal("missing metadata for column %q", name)
-				}
-				bbox := meta.Bounds
-				length := len(bbox)
-				if length == 0 {
-					continue
-				}
-				var x0 float64
-				var x1 float64
-				var y0 float64
-				var y1 float64
-				if length == 4 {
-					x0 = bbox[0]
-					y0 = bbox[1]
-					x1 = bbox[2]
-					y1 = bbox[3]
-				} else if length == 6 {
-					x0 = bbox[0]
-					y0 = bbox[1]
-					x1 = bbox[3]
-					y1 = bbox[4]
-				} else {
-					return fmt.Errorf("invalid bbox length for column %q", name)
-				}
+			bbox := geomColumn.Bounds
+			length := len(bbox)
+			if length == 0 {
+				return nil
+			}
+			var x0 float64
+			var x1 float64
+			var y0 float64
+			var y1 float64
+			if length == 4 {
+				x0 = bbox[0]
+				y0 = bbox[1]
+				x1 = bbox[2]
+				y1 = bbox[3]
+			} else if length == 6 {
+				x0 = bbox[0]
+				y0 = bbox[1]
+				x1 = bbox[3]
+				y1 = bbox[4]
+			} else {
+				return fmt.Errorf("invalid bbox length for column %q", name)
+			}
 
-				bound := geometry.Bound()
-				if x0 <= x1 {
-					// bbox does not cross the antimeridian
-					if bound.Min.X() < x0 {
-						return fmt.Errorf("geometry in column %q extends to %f, west of the bbox", name, bound.Min.X())
-					}
-					if bound.Max.X() > x1 {
-						return fmt.Errorf("geometry in column %q extends to %f, east of the bbox", name, bound.Max.X())
-					}
-				} else {
-					// bbox crosses the antimeridian
-					if bound.Max.X() > x1 && bound.Max.X() < x0 {
-						return fmt.Errorf("geometry in column %q extends to %f, outside of the bbox", name, bound.Max.X())
-					}
-					if bound.Min.X() < x0 && bound.Min.X() > x1 {
-						return fmt.Errorf("geometry in column %q extends to %f, outside of the bbox", name, bound.Min.X())
-					}
+			bound := geometry.Bound()
+			if x0 <= x1 {
+				// bbox does not cross the antimeridian
+				if bound.Min.X() < x0 {
+					return fmt.Errorf("geometry in column %q extends to %f, west of the bbox", name, bound.Min.X())
 				}
-				if bound.Min.Y() < y0 {
-					return fmt.Errorf("geometry in column %q extends to %f, south of the bbox", name, bound.Min.Y())
+				if bound.Max.X() > x1 {
+					return fmt.Errorf("geometry in column %q extends to %f, east of the bbox", name, bound.Max.X())
 				}
-				if bound.Max.Y() > y1 {
-					return fmt.Errorf("geometry in column %q extends to %f, north of the bbox", name, bound.Max.Y())
+			} else {
+				// bbox crosses the antimeridian
+				if bound.Max.X() > x1 && bound.Max.X() < x0 {
+					return fmt.Errorf("geometry in column %q extends to %f, outside of the bbox", name, bound.Max.X())
 				}
+				if bound.Min.X() < x0 && bound.Min.X() > x1 {
+					return fmt.Errorf("geometry in column %q extends to %f, outside of the bbox", name, bound.Min.X())
+				}
+			}
+			if bound.Min.Y() < y0 {
+				return fmt.Errorf("geometry in column %q extends to %f, south of the bbox", name, bound.Min.Y())
+			}
+			if bound.Max.Y() > y1 {
+				return fmt.Errorf("geometry in column %q extends to %f, north of the bbox", name, bound.Max.Y())
 			}
 
 			return nil

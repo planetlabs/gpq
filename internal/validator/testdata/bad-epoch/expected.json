@@ -67,12 +67,12 @@
       "message": "expected \"epoch\" for column \"geometry\" to be a number, got \"bogus\""
     },
     {
-      "title": "geometry columns must be stored using the BYTE_ARRAY parquet type",
+      "title": "geometry columns must not be grouped",
       "run": false,
       "passed": false
     },
     {
-      "title": "geometry columns must not be grouped",
+      "title": "geometry columns must be stored using the BYTE_ARRAY parquet type",
       "run": false,
       "passed": false
     },

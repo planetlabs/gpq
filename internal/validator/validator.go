@@ -22,9 +22,12 @@ import (
 	"io"
 	"os"
 
+	"github.com/apache/arrow/go/v14/arrow/array"
+	"github.com/apache/arrow/go/v14/parquet/file"
+	"github.com/paulmach/orb"
+	"github.com/planetlabs/gpq/internal/geo"
 	"github.com/planetlabs/gpq/internal/geoparquet"
 	_ "github.com/santhosh-tekuri/jsonschema/v5/httploader"
-	"github.com/segmentio/parquet-go"
 )
 
 type Validator struct {
@@ -47,8 +50,8 @@ func MetadataOnlyRules() []Rule {
 		OptionalEdges(),
 		OptionalBbox(),
 		OptionalEpoch(),
-		GeometryDataType(),
 		GeometryUngrouped(),
+		GeometryDataType(),
 		GeometryRepetition(),
 	}
 }
@@ -91,27 +94,23 @@ type Check struct {
 
 // Validate opens and validates a GeoParquet file.
 func (v *Validator) Validate(ctx context.Context, resource string) (*Report, error) {
-	stat, statError := os.Stat(resource)
-	if statError != nil {
-		return nil, fmt.Errorf("failed to get size of %q: %w", resource, statError)
-	}
-
-	input, readErr := os.Open(resource)
-	if readErr != nil {
-		return nil, fmt.Errorf("failed to read from %q: %w", resource, readErr)
+	input, inputErr := os.Open(resource)
+	if inputErr != nil {
+		return nil, fmt.Errorf("failed to read from %q: %w", resource, inputErr)
 	}
 	defer input.Close()
 
-	file, fileErr := parquet.OpenFile(input, stat.Size())
-	if fileErr != nil {
-		return nil, fileErr
+	reader, readerErr := file.NewParquetReader(input)
+	if readerErr != nil {
+		return nil, fmt.Errorf("failed to create parquet reader from %q: %w", resource, readerErr)
 	}
+	defer reader.Close()
 
-	return v.Report(ctx, file)
+	return v.Report(ctx, reader)
 }
 
 // Report generates a validation report for a GeoParquet file.
-func (v *Validator) Report(ctx context.Context, file *parquet.File) (*Report, error) {
+func (v *Validator) Report(ctx context.Context, file *file.Reader) (*Report, error) {
 	checks := make([]*Check, len(v.rules))
 	for i, rule := range v.rules {
 		checks[i] = &Check{
@@ -127,7 +126,7 @@ func (v *Validator) Report(ctx context.Context, file *parquet.File) (*Report, er
 	}
 
 	// run all metadata rules
-	metadataValue, metadataErr := geoparquet.GetMetadataValue(file)
+	metadataValue, metadataErr := geoparquet.GetMetadataValue(file.MetaData().KeyValueMetadata())
 	if metadataErr != nil {
 		return nil, metadataErr
 	}
@@ -161,7 +160,7 @@ func (v *Validator) Report(ctx context.Context, file *parquet.File) (*Report, er
 	}
 
 	// run all rules that need the file and parsed metadata
-	metadata, err := geoparquet.GetMetadata(file)
+	metadata, err := geoparquet.GetMetadata(file.MetaData().KeyValueMetadata())
 	if err != nil {
 		return nil, err
 	}
@@ -176,12 +175,19 @@ func (v *Validator) Report(ctx context.Context, file *parquet.File) (*Report, er
 	}
 
 	// run all the data scanning rules
-	rowReader := geoparquet.NewRowReader(file)
+	recordReader, rrErr := geoparquet.NewRecordReader(&geoparquet.ReaderConfig{
+		File:    file,
+		Context: ctx,
+	})
+	if rrErr != nil {
+		return nil, rrErr
+	}
+	defer recordReader.Close()
 
-	encodedGeometryRules := []*RowRule[EncodedGeometryMap]{}
+	encodedGeometryRules := []*ColumnValueRule[any]{}
 	encodedGeometryChecks := []*Check{}
 	for i, r := range v.rules {
-		rule, ok := r.(*RowRule[EncodedGeometryMap])
+		rule, ok := r.(*ColumnValueRule[any])
 		if ok {
 			rule.Init(info)
 			encodedGeometryRules = append(encodedGeometryRules, rule)
@@ -189,10 +195,10 @@ func (v *Validator) Report(ctx context.Context, file *parquet.File) (*Report, er
 		}
 	}
 
-	decodedGeometryRules := []*RowRule[DecodedGeometryMap]{}
+	decodedGeometryRules := []*ColumnValueRule[orb.Geometry]{}
 	decodedGeometryChecks := []*Check{}
 	for i, r := range v.rules {
-		rule, ok := r.(*RowRule[DecodedGeometryMap])
+		rule, ok := r.(*ColumnValueRule[orb.Geometry])
 		if ok {
 			rule.Init(info)
 			decodedGeometryRules = append(decodedGeometryRules, rule)
@@ -200,56 +206,54 @@ func (v *Validator) Report(ctx context.Context, file *parquet.File) (*Report, er
 		}
 	}
 
-	schema := file.Schema()
 	for {
-		row, readErr := rowReader.Next()
-		if readErr == io.EOF {
+		record, recordErr := recordReader.Read()
+		if recordErr == io.EOF {
 			break
 		}
-		if readErr != nil {
-			return nil, fmt.Errorf("failed to read row: %w", readErr)
+		if recordErr != nil {
+			return nil, fmt.Errorf("failed to read record: %w", recordErr)
 		}
+		defer record.Release()
 
-		properties := map[string]any{}
-		if err := schema.Reconstruct(&properties, row); err != nil {
-			return nil, fmt.Errorf("failed to reconstruct row: %w", err)
-		}
+		schema := record.Schema()
 
-		encodedGeometryMap := EncodedGeometryMap{}
-		for name := range metadata.Columns {
-			value, ok := properties[name]
-			if !ok {
-				return nil, fmt.Errorf("missing column %q", name)
+		arr := array.RecordToStructArray(record)
+		defer arr.Release()
+
+		for colNum := 0; colNum < arr.NumField(); colNum += 1 {
+			field := schema.Field(colNum)
+			geomColumn := metadata.Columns[field.Name]
+			if geomColumn == nil {
+				continue
 			}
-			encodedGeometryMap[name] = value
-		}
+			values := arr.Field(colNum)
+			for rowNum := 0; rowNum < arr.Len(); rowNum += 1 {
+				value := values.GetOneForMarshal(rowNum)
+				for i, rule := range encodedGeometryRules {
+					check := encodedGeometryChecks[i]
+					if err := rule.Value(field.Name, value); errors.Is(err, ErrFatal) {
+						check.Message = err.Error()
+						check.Run = true
+						return report, nil
+					}
+				}
 
-		for i, rule := range encodedGeometryRules {
-			check := encodedGeometryChecks[i]
-			if err := rule.Row(encodedGeometryMap); errors.Is(err, ErrFatal) {
-				check.Message = err.Error()
-				check.Run = true
-				return report, nil
-			}
-		}
-
-		decodedGeometryMap := DecodedGeometryMap{}
-		for name, value := range encodedGeometryMap {
-			decoded, _, err := geoparquet.Geometry(value, name, metadata, schema)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode geometry: %w", err)
-			}
-			decodedGeometryMap[name] = decoded
-		}
-
-		for i, rule := range decodedGeometryRules {
-			check := decodedGeometryChecks[i]
-			if err := rule.Row(decodedGeometryMap); errors.Is(err, ErrFatal) {
-				check.Message = err.Error()
-				check.Run = true
-				return report, nil
+				geometry, err := geo.DecodeGeometry(value, geomColumn.Encoding)
+				if err != nil {
+					return nil, fmt.Errorf("failed to decode geometry for %q: %w", field.Name, err)
+				}
+				for i, rule := range decodedGeometryRules {
+					check := decodedGeometryChecks[i]
+					if err := rule.Value(field.Name, geometry.Geometry()); errors.Is(err, ErrFatal) {
+						check.Message = err.Error()
+						check.Run = true
+						return report, nil
+					}
+				}
 			}
 		}
+
 	}
 
 	for i, rule := range encodedGeometryRules {

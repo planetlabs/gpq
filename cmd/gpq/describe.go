@@ -22,10 +22,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/apache/arrow/go/v14/parquet"
+	"github.com/apache/arrow/go/v14/parquet/file"
+	"github.com/apache/arrow/go/v14/parquet/schema"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/planetlabs/gpq/internal/geoparquet"
-	"github.com/segmentio/parquet-go"
 	"golang.org/x/term"
 )
 
@@ -53,29 +55,23 @@ func (c *DescribeCmd) Run() error {
 	}
 	defer input.Close()
 
-	stat, statErr := os.Stat(c.Input)
-	if statErr != nil {
-		return fmt.Errorf("failed to get size of %q: %w", c.Input, statErr)
-	}
-
-	file, fileErr := parquet.OpenFile(input, stat.Size())
+	fileReader, fileErr := file.NewParquetReader(input)
 	if fileErr != nil {
-		return fileErr
+		return fmt.Errorf("failed to read %q as parquet: %w", c.Input, fileErr)
 	}
 
-	metadata, geoErr := geoparquet.GetMetadata(file)
+	fileMetadata := fileReader.MetaData()
+	metadata, geoErr := geoparquet.GetMetadata(fileMetadata.KeyValueMetadata())
 	if geoErr != nil {
 		if !errors.Is(geoErr, geoparquet.ErrNoMetadata) {
 			return geoErr
 		}
 	}
 
-	schema := buildSchema("", file.Schema())
-
 	info := &Info{
-		Schema:   schema,
+		Schema:   buildSchema("", fileMetadata.Schema.Root()),
 		Metadata: metadata,
-		NumRows:  file.NumRows(),
+		NumRows:  fileMetadata.NumRows,
 	}
 
 	if c.Format == "json" {
@@ -211,47 +207,60 @@ type Schema struct {
 	Fields     []*Schema `json:"fields,omitempty"`
 }
 
-func buildSchema(name string, node parquet.Node) *Schema {
-	nodeType := node.Type()
+func buildSchema(name string, node schema.Node) *Schema {
 	annotation := ""
-	if logicalType := nodeType.LogicalType(); logicalType != nil {
-		annotation = logicalType.String()
+	logicalType := node.LogicalType()
+	if !logicalType.IsNone() {
+		annotation = strings.ToLower(logicalType.String())
+	}
+
+	repetition := node.RepetitionType()
+	optional := false
+	repeated := false
+	if repetition == parquet.Repetitions.Optional {
+		optional = true
+	} else if repetition == parquet.Repetitions.Repeated {
+		repeated = true
 	}
 
 	field := &Schema{
 		Name:       name,
-		Optional:   node.Optional(),
-		Repeated:   node.Repeated(),
+		Optional:   optional,
+		Repeated:   repeated,
 		Annotation: annotation,
 	}
 
-	if node.Leaf() {
-		switch nodeType.Kind() {
-		case parquet.Boolean:
+	if leaf, ok := node.(*schema.PrimitiveNode); ok {
+		switch leaf.PhysicalType() {
+		case parquet.Types.Boolean:
 			field.Type = "boolean"
-		case parquet.Int32:
+		case parquet.Types.Int32:
 			field.Type = "int32"
-		case parquet.Int64:
+		case parquet.Types.Int64:
 			field.Type = "int64"
-		case parquet.Int96:
+		case parquet.Types.Int96:
 			field.Type = "int96"
-		case parquet.Float:
+		case parquet.Types.Float:
 			field.Type = "float"
-		case parquet.Double:
+		case parquet.Types.Double:
 			field.Type = "double"
-		case parquet.ByteArray:
+		case parquet.Types.ByteArray:
 			field.Type = "binary"
-		case parquet.FixedLenByteArray:
-			field.Type = fmt.Sprintf("fixed_len_byte_array(%d)", nodeType.Length())
+		case parquet.Types.FixedLenByteArray:
+			field.Type = fmt.Sprintf("fixed_len_byte_array(%d)", leaf.TypeLength())
 		default:
-			field.Type = "unknown"
+			field.Type = leaf.PhysicalType().String()
 		}
 		return field
 	}
 
-	field.Fields = make([]*Schema, len(node.Fields()))
-	for i, groupField := range node.Fields() {
-		field.Fields[i] = buildSchema(groupField.Name(), groupField)
+	if group, ok := node.(*schema.GroupNode); ok {
+		count := group.NumFields()
+		field.Fields = make([]*Schema, count)
+		for i := 0; i < count; i += 1 {
+			groupField := group.Field(i)
+			field.Fields[i] = buildSchema(groupField.Name(), groupField)
+		}
 	}
 	return field
 }

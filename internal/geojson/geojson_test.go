@@ -16,16 +16,24 @@ package geojson_test
 
 import (
 	"bytes"
-	"fmt"
-	"io"
+	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
+	"github.com/apache/arrow/go/v14/arrow/array"
+	"github.com/apache/arrow/go/v14/arrow/memory"
+	"github.com/apache/arrow/go/v14/parquet"
+	"github.com/apache/arrow/go/v14/parquet/compress"
+	"github.com/apache/arrow/go/v14/parquet/file"
+	"github.com/apache/arrow/go/v14/parquet/pqarrow"
+	"github.com/apache/arrow/go/v14/parquet/schema"
 	"github.com/paulmach/orb"
 	"github.com/paulmach/orb/encoding/wkb"
+	"github.com/planetlabs/gpq/internal/geo"
 	"github.com/planetlabs/gpq/internal/geojson"
 	"github.com/planetlabs/gpq/internal/geoparquet"
-	"github.com/segmentio/parquet-go"
+	"github.com/planetlabs/gpq/internal/pqutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,14 +43,8 @@ func TestFromParquetv040(t *testing.T) {
 	reader, openErr := os.Open(input)
 	require.NoError(t, openErr)
 
-	info, statErr := os.Stat(input)
-	require.NoError(t, statErr)
-
-	file, fileErr := parquet.OpenFile(reader, info.Size())
-	require.NoError(t, fileErr)
-
 	buffer := &bytes.Buffer{}
-	convertErr := geojson.FromParquet(file, buffer)
+	convertErr := geojson.FromParquet(reader, buffer)
 	assert.NoError(t, convertErr)
 
 	expected, err := os.ReadFile("testdata/example.geojson")
@@ -56,148 +58,14 @@ func TestFromParquetv100Beta1(t *testing.T) {
 	reader, openErr := os.Open(input)
 	require.NoError(t, openErr)
 
-	info, statErr := os.Stat(input)
-	require.NoError(t, statErr)
-
-	file, fileErr := parquet.OpenFile(reader, info.Size())
-	require.NoError(t, fileErr)
-
 	buffer := &bytes.Buffer{}
-	convertErr := geojson.FromParquet(file, buffer)
+	convertErr := geojson.FromParquet(reader, buffer)
 	assert.NoError(t, convertErr)
 
 	expected, err := os.ReadFile("testdata/example.geojson")
 	require.NoError(t, err)
 
 	assert.JSONEq(t, string(expected), buffer.String())
-}
-
-func TestFeatureReader(t *testing.T) {
-	file, openErr := os.Open("testdata/example.geojson")
-	require.NoError(t, openErr)
-
-	reader := geojson.NewFeatureReader(file)
-
-	features := []*geojson.Feature{}
-	for {
-		feature, err := reader.Next()
-		if err == io.EOF {
-			break
-		}
-		require.NoError(t, err)
-		features = append(features, feature)
-	}
-	require.Len(t, features, 5)
-
-	fiji := features[0]
-	assert.NotNil(t, fiji.Geometry)
-	assert.Equal(t, "Oceania", fiji.Properties["continent"])
-	assert.Equal(t, float64(920938), fiji.Properties["pop_est"])
-
-	usa := features[4]
-	assert.NotNil(t, usa.Geometry)
-	assert.Equal(t, "North America", usa.Properties["continent"])
-	assert.Equal(t, float64(326625791), usa.Properties["pop_est"])
-}
-
-func TestFeatureReaderPointGeometry(t *testing.T) {
-	file, openErr := os.Open("testdata/point-geometry.geojson")
-	require.NoError(t, openErr)
-
-	reader := geojson.NewFeatureReader(file)
-
-	features := []*geojson.Feature{}
-	for {
-		feature, err := reader.Next()
-		if err == io.EOF {
-			break
-		}
-		require.NoError(t, err)
-		features = append(features, feature)
-	}
-	require.Len(t, features, 1)
-
-	feature := features[0]
-	require.NotNil(t, feature.Geometry)
-	assert.Equal(t, "Point", feature.Geometry.GeoJSONType())
-	point, ok := feature.Geometry.(orb.Point)
-	require.True(t, ok)
-	assert.True(t, point.Equal(orb.Point{1, 2}))
-	assert.Len(t, feature.Properties, 0)
-}
-
-func TestFeatureReaderSingleFeature(t *testing.T) {
-	file, openErr := os.Open("testdata/feature.geojson")
-	require.NoError(t, openErr)
-
-	reader := geojson.NewFeatureReader(file)
-
-	features := []*geojson.Feature{}
-	for {
-		feature, err := reader.Next()
-		if err == io.EOF {
-			break
-		}
-		require.NoError(t, err)
-		features = append(features, feature)
-	}
-	require.Len(t, features, 1)
-
-	feature := features[0]
-	require.NotNil(t, feature.Geometry)
-	assert.Equal(t, "Point", feature.Geometry.GeoJSONType())
-	point, ok := feature.Geometry.(orb.Point)
-	require.True(t, ok)
-	assert.True(t, point.Equal(orb.Point{1, 2}))
-	assert.Equal(t, map[string]any{"name": "test"}, feature.Properties)
-}
-
-func TestFeatureReaderEmptyFeatureCollection(t *testing.T) {
-	file, openErr := os.Open("testdata/empty-collection.geojson")
-	require.NoError(t, openErr)
-
-	reader := geojson.NewFeatureReader(file)
-
-	feature, err := reader.Next()
-	assert.Nil(t, feature)
-	assert.Equal(t, io.EOF, err)
-}
-
-func TestFeatureReaderBadCollection(t *testing.T) {
-	file, openErr := os.Open("testdata/bad-collection.geojson")
-	require.NoError(t, openErr)
-
-	reader := geojson.NewFeatureReader(file)
-
-	feature, noErr := reader.Next()
-	assert.NotNil(t, feature)
-	assert.NoError(t, noErr)
-
-	noFeature, err := reader.Next()
-	require.Nil(t, noFeature)
-	require.EqualError(t, err, "geojson: invalid geometry")
-}
-
-func TestFeatureReaderNotGeoJSON(t *testing.T) {
-	file, openErr := os.Open("testdata/not-geojson.json")
-	require.NoError(t, openErr)
-
-	reader := geojson.NewFeatureReader(file)
-
-	feature, err := reader.Next()
-	assert.Nil(t, feature)
-	assert.EqualError(t, err, "expected a FeatureCollection, a Feature, or a Geometry object")
-}
-
-func TestFeatureReaderNotGeoJSONArray(t *testing.T) {
-	file, openErr := os.Open("testdata/array.json")
-	require.NoError(t, openErr)
-
-	reader := geojson.NewFeatureReader(file)
-
-	feature, err := reader.Next()
-	assert.Nil(t, feature)
-	assert.EqualError(t, err, "expected a JSON object, got [")
 }
 
 func TestToParquet(t *testing.T) {
@@ -209,10 +77,10 @@ func TestToParquet(t *testing.T) {
 	assert.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
 
-	metadata, geoErr := geoparquet.GetMetadata(parquetFile)
+	metadata, geoErr := geoparquet.GetMetadata(fileReader.MetaData().KeyValueMetadata())
 	require.NoError(t, geoErr)
 
 	geometryTypes := metadata.Columns[metadata.PrimaryColumn].GetGeometryTypes()
@@ -225,10 +93,10 @@ func TestToParquet(t *testing.T) {
 	gotBounds := metadata.Columns[metadata.PrimaryColumn].Bounds
 	assert.Equal(t, []float64{-180, -18.28799, 180, 83.23324000000001}, gotBounds)
 
-	assert.Equal(t, int64(5), parquetFile.NumRows())
+	assert.Equal(t, int64(5), fileReader.NumRows())
 
 	geojsonBuffer := &bytes.Buffer{}
-	fromParquetErr := geojson.FromParquet(parquetFile, geojsonBuffer)
+	fromParquetErr := geojson.FromParquet(parquetInput, geojsonBuffer)
 	require.NoError(t, fromParquetErr)
 
 	expected, err := os.ReadFile("testdata/example.geojson")
@@ -243,7 +111,7 @@ func TestToParquetMismatchedTypes(t *testing.T) {
 
 	parquetBuffer := &bytes.Buffer{}
 	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
-	assert.EqualError(t, toParquetErr, "mixed types for \"stringProperty\", expected string, but got float64")
+	assert.EqualError(t, toParquetErr, "expected \"stringProperty\" to be a string, got 42")
 }
 
 func TestToParquetRepeatedProps(t *testing.T) {
@@ -255,20 +123,23 @@ func TestToParquetRepeatedProps(t *testing.T) {
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
 
-	schema := parquetFile.Schema()
+	sc := fileReader.MetaData().Schema
 
-	numbers, ok := schema.Lookup("numbers")
+	numbers, ok := pqutil.LookupListElementNode(sc, "numbers")
 	require.True(t, ok)
-	assert.True(t, numbers.Node.Repeated())
-	assert.Equal(t, parquet.DoubleType, numbers.Node.Type())
 
-	strings, ok := schema.Lookup("strings")
+	assert.Equal(t, parquet.Repetitions.Optional, numbers.RepetitionType())
+	assert.Equal(t, parquet.Types.Double, numbers.PhysicalType())
+
+	strings, ok := pqutil.LookupListElementNode(sc, "strings")
 	require.True(t, ok)
-	assert.True(t, strings.Node.Repeated())
-	assert.Equal(t, parquet.String().Type(), strings.Node.Type())
+
+	assert.Equal(t, parquet.Repetitions.Optional, strings.RepetitionType())
+	assert.Equal(t, parquet.Types.ByteArray, strings.PhysicalType())
+	assert.Equal(t, schema.StringLogicalType{}, strings.LogicalType())
 }
 
 func TestToParquetNullGeometry(t *testing.T) {
@@ -280,20 +151,20 @@ func TestToParquetNullGeometry(t *testing.T) {
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
 
-	schema := parquetFile.Schema()
+	sc := fileReader.MetaData().Schema
 
-	place, ok := schema.Lookup("place")
+	place, ok := pqutil.LookupPrimitiveNode(sc, "place")
 	require.True(t, ok)
-	assert.True(t, place.Node.Optional())
-	assert.Equal(t, parquet.String().Type(), place.Node.Type())
+	assert.Equal(t, parquet.Repetitions.Optional, place.RepetitionType())
+	assert.Equal(t, schema.StringLogicalType{}, place.LogicalType())
 
-	geometry, ok := schema.Lookup("geometry")
+	geometry, ok := pqutil.LookupPrimitiveNode(sc, "geometry")
 	require.True(t, ok)
-	assert.True(t, geometry.Node.Optional())
-	assert.Equal(t, parquet.ByteArrayType, geometry.Node.Type())
+	assert.Equal(t, parquet.Repetitions.Optional, geometry.RepetitionType())
+	assert.Equal(t, parquet.Types.ByteArray, geometry.PhysicalType())
 }
 
 func TestToParquetAllNullGeometry(t *testing.T) {
@@ -305,30 +176,30 @@ func TestToParquetAllNullGeometry(t *testing.T) {
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
 
-	metadata, geoErr := geoparquet.GetMetadata(parquetFile)
+	metadata, geoErr := geoparquet.GetMetadata(fileReader.MetaData().KeyValueMetadata())
 	require.NoError(t, geoErr)
 
 	assert.Len(t, metadata.Columns[metadata.PrimaryColumn].GeometryTypes, 0)
 	assert.Nil(t, metadata.Columns[metadata.PrimaryColumn].GeometryType)
 	assert.Len(t, metadata.Columns[metadata.PrimaryColumn].GetGeometryTypes(), 0)
 
-	schema := parquetFile.Schema()
+	sc := fileReader.MetaData().Schema
 
-	place, ok := schema.Lookup("place")
+	place, ok := pqutil.LookupPrimitiveNode(sc, "place")
 	require.True(t, ok)
-	assert.True(t, place.Node.Optional())
-	assert.Equal(t, parquet.String().Type(), place.Node.Type())
+	assert.Equal(t, parquet.Repetitions.Optional, place.RepetitionType())
+	assert.Equal(t, schema.StringLogicalType{}, place.LogicalType())
 
-	geometry, ok := schema.Lookup("geometry")
+	geometry, ok := pqutil.LookupPrimitiveNode(sc, "geometry")
 	require.True(t, ok)
-	assert.True(t, geometry.Node.Optional())
-	assert.Equal(t, parquet.ByteArrayType, geometry.Node.Type())
+	assert.Equal(t, parquet.Repetitions.Optional, geometry.RepetitionType())
+	assert.Equal(t, parquet.Types.ByteArray, geometry.PhysicalType())
 }
 
-func TestToParqueStringId(t *testing.T) {
+func TestToParquetStringId(t *testing.T) {
 	geojsonFile, openErr := os.Open("testdata/string-id.geojson")
 	require.NoError(t, openErr)
 
@@ -337,17 +208,17 @@ func TestToParqueStringId(t *testing.T) {
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
 
-	metadata, geoErr := geoparquet.GetMetadata(parquetFile)
+	metadata, geoErr := geoparquet.GetMetadata(fileReader.MetaData().KeyValueMetadata())
 	require.NoError(t, geoErr)
 
 	geometryTypes := metadata.Columns[metadata.PrimaryColumn].GetGeometryTypes()
 	assert.Equal(t, []string{"Point"}, geometryTypes)
 }
 
-func TestToParqueNumberId(t *testing.T) {
+func TestToParquetNumberId(t *testing.T) {
 	geojsonFile, openErr := os.Open("testdata/number-id.geojson")
 	require.NoError(t, openErr)
 
@@ -356,17 +227,17 @@ func TestToParqueNumberId(t *testing.T) {
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
 
-	metadata, geoErr := geoparquet.GetMetadata(parquetFile)
+	metadata, geoErr := geoparquet.GetMetadata(fileReader.MetaData().KeyValueMetadata())
 	require.NoError(t, geoErr)
 
 	geometryTypes := metadata.Columns[metadata.PrimaryColumn].GetGeometryTypes()
 	assert.Equal(t, []string{"Point"}, geometryTypes)
 }
 
-func TestToParqueBooleanId(t *testing.T) {
+func TestToParquetBooleanId(t *testing.T) {
 	geojsonFile, openErr := os.Open("testdata/boolean-id.geojson")
 	require.NoError(t, openErr)
 
@@ -375,7 +246,7 @@ func TestToParqueBooleanId(t *testing.T) {
 	assert.ErrorContains(t, toParquetErr, "expected id to be a string or number, got: true")
 }
 
-func TestToParqueArrayId(t *testing.T) {
+func TestToParquetArrayId(t *testing.T) {
 	geojsonFile, openErr := os.Open("testdata/array-id.geojson")
 	require.NoError(t, openErr)
 
@@ -384,7 +255,7 @@ func TestToParqueArrayId(t *testing.T) {
 	assert.ErrorContains(t, toParquetErr, "expected id to be a string or number, got: [")
 }
 
-func TestToParqueObjectId(t *testing.T) {
+func TestToParquetObjectId(t *testing.T) {
 	geojsonFile, openErr := os.Open("testdata/object-id.geojson")
 	require.NoError(t, openErr)
 
@@ -402,10 +273,10 @@ func TestToParquetWithCRS(t *testing.T) {
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
 
-	metadata, geoErr := geoparquet.GetMetadata(parquetFile)
+	metadata, geoErr := geoparquet.GetMetadata(fileReader.MetaData().KeyValueMetadata())
 	require.NoError(t, geoErr)
 
 	geometryTypes := metadata.Columns[metadata.PrimaryColumn].GetGeometryTypes()
@@ -421,26 +292,26 @@ func TestToParquetExtraArray(t *testing.T) {
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
 
-	metadata, geoErr := geoparquet.GetMetadata(parquetFile)
+	metadata, geoErr := geoparquet.GetMetadata(fileReader.MetaData().KeyValueMetadata())
 	require.NoError(t, geoErr)
 
 	geometryTypes := metadata.Columns[metadata.PrimaryColumn].GetGeometryTypes()
 	assert.Equal(t, []string{"Point"}, geometryTypes)
 
-	schema := parquetFile.Schema()
+	sc := fileReader.MetaData().Schema
 
-	place, ok := schema.Lookup("name")
+	place, ok := pqutil.LookupPrimitiveNode(sc, "name")
 	require.True(t, ok)
-	assert.True(t, place.Node.Optional())
-	assert.Equal(t, parquet.String().Type(), place.Node.Type())
+	assert.Equal(t, parquet.Repetitions.Optional, place.RepetitionType())
+	assert.Equal(t, schema.StringLogicalType{}, place.LogicalType())
 
-	geometry, ok := schema.Lookup("geometry")
+	geometry, ok := pqutil.LookupPrimitiveNode(sc, "geometry")
 	require.True(t, ok)
-	assert.True(t, geometry.Node.Optional())
-	assert.Equal(t, parquet.ByteArrayType, geometry.Node.Type())
+	assert.Equal(t, parquet.Repetitions.Optional, geometry.RepetitionType())
+	assert.Equal(t, parquet.Types.ByteArray, geometry.PhysicalType())
 }
 
 func TestToParquetExtraObject(t *testing.T) {
@@ -452,26 +323,26 @@ func TestToParquetExtraObject(t *testing.T) {
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
 
-	metadata, geoErr := geoparquet.GetMetadata(parquetFile)
+	metadata, geoErr := geoparquet.GetMetadata(fileReader.MetaData().KeyValueMetadata())
 	require.NoError(t, geoErr)
 
 	geometryTypes := metadata.Columns[metadata.PrimaryColumn].GetGeometryTypes()
 	assert.Equal(t, []string{"Point"}, geometryTypes)
 
-	schema := parquetFile.Schema()
+	sc := fileReader.MetaData().Schema
 
-	place, ok := schema.Lookup("name")
+	place, ok := pqutil.LookupPrimitiveNode(sc, "name")
 	require.True(t, ok)
-	assert.True(t, place.Node.Optional())
-	assert.Equal(t, parquet.String().Type(), place.Node.Type())
+	assert.Equal(t, parquet.Repetitions.Optional, place.RepetitionType())
+	assert.Equal(t, schema.StringLogicalType{}, place.LogicalType())
 
-	geometry, ok := schema.Lookup("geometry")
+	geometry, ok := pqutil.LookupPrimitiveNode(sc, "geometry")
 	require.True(t, ok)
-	assert.True(t, geometry.Node.Optional())
-	assert.Equal(t, parquet.ByteArrayType, geometry.Node.Type())
+	assert.Equal(t, parquet.Repetitions.Optional, geometry.RepetitionType())
+	assert.Equal(t, parquet.Types.ByteArray, geometry.PhysicalType())
 }
 
 func TestRoundTripRepeatedProps(t *testing.T) {
@@ -485,11 +356,9 @@ func TestRoundTripRepeatedProps(t *testing.T) {
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
 
 	jsonBuffer := &bytes.Buffer{}
-	convertErr := geojson.FromParquet(parquetFile, jsonBuffer)
+	convertErr := geojson.FromParquet(parquetInput, jsonBuffer)
 	require.NoError(t, convertErr)
 
 	assert.JSONEq(t, string(inputData), jsonBuffer.String())
@@ -506,11 +375,9 @@ func TestRoundTripNestedProps(t *testing.T) {
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
 
 	jsonBuffer := &bytes.Buffer{}
-	convertErr := geojson.FromParquet(parquetFile, jsonBuffer)
+	convertErr := geojson.FromParquet(parquetInput, jsonBuffer)
 	require.NoError(t, convertErr)
 
 	assert.JSONEq(t, string(inputData), jsonBuffer.String())
@@ -527,11 +394,9 @@ func TestRoundTripNullGeometry(t *testing.T) {
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
 
 	jsonBuffer := &bytes.Buffer{}
-	convertErr := geojson.FromParquet(parquetFile, jsonBuffer)
+	convertErr := geojson.FromParquet(parquetInput, jsonBuffer)
 	require.NoError(t, convertErr)
 
 	assert.JSONEq(t, string(inputData), jsonBuffer.String())
@@ -548,37 +413,59 @@ func TestRoundTripSparseProperties(t *testing.T) {
 	require.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
 
 	jsonBuffer := &bytes.Buffer{}
-	convertErr := geojson.FromParquet(parquetFile, jsonBuffer)
+	convertErr := geojson.FromParquet(parquetInput, jsonBuffer)
 	require.NoError(t, convertErr)
 
 	assert.JSONEq(t, string(inputData), jsonBuffer.String())
 }
 
-func makeGeoParquet[T any](rows []T, metadata *geoparquet.Metadata) (*parquet.File, error) {
-	data := &bytes.Buffer{}
-	writer := geoparquet.NewGenericWriter[T](data, metadata)
-
-	_, writeErr := writer.Write(rows)
-	if writeErr != nil {
-		return nil, fmt.Errorf("trouble writing rows: %w", writeErr)
+func makeGeoParquetReader[T any](rows []T, metadata *geoparquet.Metadata) (*bytes.Reader, error) {
+	data, err := json.Marshal(rows)
+	if err != nil {
+		return nil, err
 	}
 
-	closeErr := writer.Close()
-	if closeErr != nil {
-		return nil, fmt.Errorf("trouble closing writer: %w", closeErr)
+	parquetSchema, err := schema.NewSchemaFromStruct(rows[0])
+	if err != nil {
+		return nil, err
 	}
 
-	return parquet.OpenFile(bytes.NewReader(data.Bytes()), int64(data.Len()))
+	arrowSchema, err := pqarrow.FromParquet(parquetSchema, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	output := &bytes.Buffer{}
+	recordWriter, err := geoparquet.NewRecordWriter(&geoparquet.WriterConfig{
+		Writer:      output,
+		Metadata:    metadata,
+		ArrowSchema: arrowSchema,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	rec, _, err := array.RecordFromJSON(memory.DefaultAllocator, arrowSchema, strings.NewReader(string(data)))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := recordWriter.Write(rec); err != nil {
+		return nil, err
+	}
+	if err := recordWriter.Close(); err != nil {
+		return nil, err
+	}
+
+	return bytes.NewReader(output.Bytes()), nil
 }
 
 func TestWKT(t *testing.T) {
 	type Row struct {
-		Name     string `parquet:"name"`
-		Geometry string `parquet:"geometry"`
+		Name     string `parquet:"name=name, logical=String" json:"name"`
+		Geometry string `parquet:"name=geometry, logical=String" json:"geometry"`
 	}
 
 	rows := []*Row{
@@ -593,13 +480,13 @@ func TestWKT(t *testing.T) {
 	}
 
 	metadata := geoparquet.DefaultMetadata()
-	metadata.Columns[metadata.PrimaryColumn].Encoding = geoparquet.EncodingWKT
+	metadata.Columns[metadata.PrimaryColumn].Encoding = geo.EncodingWKT
 
-	file, fileErr := makeGeoParquet(rows, metadata)
-	require.NoError(t, fileErr)
+	reader, readerErr := makeGeoParquetReader(rows, metadata)
+	require.NoError(t, readerErr)
 
 	output := &bytes.Buffer{}
-	convertErr := geojson.FromParquet(file, output)
+	convertErr := geojson.FromParquet(reader, output)
 	require.NoError(t, convertErr)
 
 	expected := `{
@@ -633,8 +520,8 @@ func TestWKT(t *testing.T) {
 
 func TestWKTNoEncoding(t *testing.T) {
 	type Row struct {
-		Name     string `parquet:"name"`
-		Geometry string `parquet:"geometry"`
+		Name     string `parquet:"name=name, logical=String" json:"name"`
+		Geometry string `parquet:"name=geometry, logical=String" json:"geometry"`
 	}
 
 	rows := []*Row{
@@ -647,11 +534,11 @@ func TestWKTNoEncoding(t *testing.T) {
 	metadata := geoparquet.DefaultMetadata()
 	metadata.Columns[metadata.PrimaryColumn].Encoding = ""
 
-	file, fileErr := makeGeoParquet(rows, metadata)
-	require.NoError(t, fileErr)
+	reader, readerErr := makeGeoParquetReader(rows, metadata)
+	require.NoError(t, readerErr)
 
 	output := &bytes.Buffer{}
-	convertErr := geojson.FromParquet(file, output)
+	convertErr := geojson.FromParquet(reader, output)
 	require.NoError(t, convertErr)
 
 	expected := `{
@@ -675,8 +562,8 @@ func TestWKTNoEncoding(t *testing.T) {
 
 func TestWKB(t *testing.T) {
 	type Row struct {
-		Name     string `parquet:"name"`
-		Geometry []byte `parquet:"geometry"`
+		Name     string `parquet:"name=name, logical=String" json:"name"`
+		Geometry []byte `parquet:"name=geometry" json:"geometry"`
 	}
 
 	point, pointErr := wkb.Marshal(orb.Point{1, 2})
@@ -691,11 +578,11 @@ func TestWKB(t *testing.T) {
 
 	metadata := geoparquet.DefaultMetadata()
 
-	file, fileErr := makeGeoParquet(rows, metadata)
-	require.NoError(t, fileErr)
+	reader, readerErr := makeGeoParquetReader(rows, metadata)
+	require.NoError(t, readerErr)
 
 	output := &bytes.Buffer{}
-	convertErr := geojson.FromParquet(file, output)
+	convertErr := geojson.FromParquet(reader, output)
 	require.NoError(t, convertErr)
 
 	expected := `{
@@ -719,8 +606,8 @@ func TestWKB(t *testing.T) {
 
 func TestWKBNoEncoding(t *testing.T) {
 	type Row struct {
-		Name     string `parquet:"name"`
-		Geometry []byte `parquet:"geometry"`
+		Name     string `parquet:"name=name, logical=String" json:"name"`
+		Geometry []byte `parquet:"name=geometry" json:"geometry"`
 	}
 
 	point, pointErr := wkb.Marshal(orb.Point{1, 2})
@@ -736,11 +623,11 @@ func TestWKBNoEncoding(t *testing.T) {
 	metadata := geoparquet.DefaultMetadata()
 	metadata.Columns[metadata.PrimaryColumn].Encoding = ""
 
-	file, fileErr := makeGeoParquet(rows, metadata)
-	require.NoError(t, fileErr)
+	reader, readerErr := makeGeoParquetReader(rows, metadata)
+	require.NoError(t, readerErr)
 
 	output := &bytes.Buffer{}
-	convertErr := geojson.FromParquet(file, output)
+	convertErr := geojson.FromParquet(reader, output)
 	require.NoError(t, convertErr)
 
 	expected := `{
@@ -772,10 +659,10 @@ func TestCodecUncompressed(t *testing.T) {
 	assert.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
 
-	assert.Equal(t, parquet.Uncompressed.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
+	assert.Equal(t, compress.Codecs.Uncompressed, compress.Compression(fileReader.MetaData().RowGroups[0].Columns[0].MetaData.Codec))
 }
 
 func TestCodecSnappy(t *testing.T) {
@@ -788,10 +675,10 @@ func TestCodecSnappy(t *testing.T) {
 	assert.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
 
-	assert.Equal(t, parquet.Snappy.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
+	assert.Equal(t, compress.Codecs.Snappy, compress.Compression(fileReader.MetaData().RowGroups[0].Columns[0].MetaData.Codec))
 }
 
 func TestCodecGzip(t *testing.T) {
@@ -804,10 +691,10 @@ func TestCodecGzip(t *testing.T) {
 	assert.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
 
-	assert.Equal(t, parquet.Gzip.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
+	assert.Equal(t, compress.Codecs.Gzip, compress.Compression(fileReader.MetaData().RowGroups[0].Columns[0].MetaData.Codec))
 }
 
 func TestCodecBrotli(t *testing.T) {
@@ -820,10 +707,10 @@ func TestCodecBrotli(t *testing.T) {
 	assert.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
 
-	assert.Equal(t, parquet.Brotli.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
+	assert.Equal(t, compress.Codecs.Brotli, compress.Compression(fileReader.MetaData().RowGroups[0].Columns[0].MetaData.Codec))
 }
 
 func TestCodecZstd(t *testing.T) {
@@ -836,26 +723,10 @@ func TestCodecZstd(t *testing.T) {
 	assert.NoError(t, toParquetErr)
 
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
 
-	assert.Equal(t, parquet.Zstd.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
-}
-
-func TestCodecLz4raw(t *testing.T) {
-	geojsonFile, openErr := os.Open("testdata/example.geojson")
-	require.NoError(t, openErr)
-
-	parquetBuffer := &bytes.Buffer{}
-	convertOptions := &geojson.ConvertOptions{Compression: "lz4raw"}
-	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
-	assert.NoError(t, toParquetErr)
-
-	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
-	parquetFile, openErr := parquet.OpenFile(parquetInput, parquetInput.Size())
-	require.NoError(t, openErr)
-
-	assert.Equal(t, parquet.Lz4Raw.CompressionCodec(), parquetFile.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
+	assert.Equal(t, compress.Codecs.Zstd, compress.Compression(fileReader.MetaData().RowGroups[0].Columns[0].MetaData.Codec))
 }
 
 func TestCodecInvalid(t *testing.T) {
