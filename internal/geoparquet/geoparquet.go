@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	Version                     = "1.0.0-beta.1"
+	Version                     = "1.0.0"
 	MetadataKey                 = "geo"
 	EncodingWKB                 = "WKB"
 	EncodingWKT                 = "WKT"

@@ -87,6 +87,32 @@ func TestGetMetadataV100Beta1(t *testing.T) {
 	assert.Equal(t, "WGS 84 (CRS84)", col.CRS.Name)
 }
 
+func TestGetMetadataV1(t *testing.T) {
+	fixturePath := "../testdata/cases/example-v1.0.0.parquet"
+	info, statErr := os.Stat(fixturePath)
+	require.NoError(t, statErr)
+
+	input, openErr := os.Open(fixturePath)
+	require.NoError(t, openErr)
+
+	file, fileErr := parquet.OpenFile(input, info.Size())
+	require.NoError(t, fileErr)
+
+	metadata, geoErr := geoparquet.GetMetadata(file)
+	require.NoError(t, geoErr)
+
+	assert.Equal(t, "geometry", metadata.PrimaryColumn)
+	assert.Equal(t, "1.0.0", metadata.Version)
+	require.Len(t, metadata.Columns, 1)
+
+	col := metadata.Columns[metadata.PrimaryColumn]
+	assert.Equal(t, "WKB", col.Encoding)
+	geomTypes := col.GetGeometryTypes()
+	assert.Len(t, geomTypes, 2)
+	assert.Contains(t, geomTypes, "Polygon")
+	assert.Contains(t, geomTypes, "MultiPolygon")
+}
+
 func TestRowReaderV040(t *testing.T) {
 	fixturePath := "../testdata/cases/example-v0.4.0.parquet"
 	info, statErr := os.Stat(fixturePath)

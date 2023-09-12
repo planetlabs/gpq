@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "version": "1.0.0-beta.1",
+    "version": "1.0.0",
     "primary_column": "geometry",
     "columns": {
       "geometry": {
