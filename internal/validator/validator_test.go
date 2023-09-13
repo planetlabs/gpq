@@ -112,7 +112,7 @@ func (s *Suite) TearDownSuite() {
 	jsonschema.Loaders["https"] = s.originalHttpsLoader
 }
 
-func (s *Suite) XTestValidCases() {
+func (s *Suite) TestValidCases() {
 	cases := []string{
 		"example-v1.0.0-beta.1.parquet",
 	}
