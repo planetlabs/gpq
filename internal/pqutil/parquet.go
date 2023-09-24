@@ -5,23 +5,10 @@ import (
 	"strings"
 
 	"github.com/apache/arrow/go/v14/parquet"
-	"github.com/apache/arrow/go/v14/parquet/file"
 	pqschema "github.com/apache/arrow/go/v14/parquet/schema"
 )
 
 var ParquetStringType = pqschema.StringLogicalType{}
-
-func GetParquetSchema(input parquet.ReaderAtSeeker) (*pqschema.Schema, error) {
-	fileReader, err := file.NewParquetReader(input)
-	if err != nil {
-		return nil, err
-	}
-	schema := fileReader.MetaData().Schema
-	if err := fileReader.Close(); err != nil {
-		return nil, err
-	}
-	return schema, nil
-}
 
 func LookupNode(schema *pqschema.Schema, name string) (pqschema.Node, bool) {
 	root := schema.Root()
@@ -131,7 +118,7 @@ func (w *parquetWriter) writeNode(node pqschema.Node, level int) {
 func (w *parquetWriter) writeGroupNode(node *pqschema.GroupNode, level int) {
 	repetition := node.RepetitionType().String()
 	name := node.Name()
-	annotation := logicalOrConvertedAnnotation(node)
+	annotation := LogicalOrConvertedAnnotation(node)
 
 	w.writeLine(fmt.Sprintf("%s group %s%s {", repetition, name, annotation), level)
 	for i := 0; i < node.NumFields(); i += 1 {
@@ -144,12 +131,12 @@ func (w *parquetWriter) writePrimitiveNode(node *pqschema.PrimitiveNode, level i
 	repetition := node.RepetitionType().String()
 	name := node.Name()
 	nodeType := physicalTypeString(node.PhysicalType())
-	annotation := logicalOrConvertedAnnotation(node)
+	annotation := LogicalOrConvertedAnnotation(node)
 
 	w.writeLine(fmt.Sprintf("%s %s %s%s;", repetition, nodeType, name, annotation), level)
 }
 
-func logicalOrConvertedAnnotation(node pqschema.Node) string {
+func LogicalOrConvertedAnnotation(node pqschema.Node) string {
 	logicalType := node.LogicalType()
 	convertedType := node.ConvertedType()
 

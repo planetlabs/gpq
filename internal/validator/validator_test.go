@@ -83,7 +83,7 @@ func (s *Suite) copyWithMetadata(input parquet.ReaderAtSeeker, output io.Writer,
 	config := &pqutil.TransformConfig{
 		Reader: input,
 		Writer: output,
-		BeforeClose: func(fileWriter *file.Writer) error {
+		BeforeClose: func(fileReader *file.Reader, fileWriter *file.Writer) error {
 			return fileWriter.AppendKeyValueMetadata(geoparquet.MetadataKey, metadata)
 		},
 	}

@@ -114,11 +114,9 @@ func (c *ConvertCmd) Run() error {
 		return geojson.FromParquet(input, output)
 	}
 
-	var convertOptions *geoparquet.ConvertOptions
-	if c.InputPrimaryColumn != geoparquet.DefaultGeometryColumn {
-		convertOptions = &geoparquet.ConvertOptions{
-			InputPrimaryColumn: c.InputPrimaryColumn,
-		}
+	convertOptions := &geoparquet.ConvertOptions{
+		InputPrimaryColumn: c.InputPrimaryColumn,
+		Compression:        c.Compression,
 	}
 
 	return geoparquet.FromParquet(input, output, convertOptions)

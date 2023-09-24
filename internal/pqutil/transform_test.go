@@ -144,7 +144,8 @@ func TestTransformColumn(t *testing.T) {
 		}
 	]`
 
-	transformSchema := func(inputSchema *schema.Schema) (*schema.Schema, error) {
+	transformSchema := func(fileReader *file.Reader) (*schema.Schema, error) {
+		inputSchema := fileReader.MetaData().Schema
 		inputRoot := inputSchema.Root()
 		numFields := inputRoot.NumFields()
 
