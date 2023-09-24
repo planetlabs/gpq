@@ -17,7 +17,7 @@ import (
 
 type ColumnTransformer func(*arrow.Field, *arrow.Field, *arrow.Chunked) (*arrow.Chunked, error)
 
-type SchemaTransformer func(*schema.Schema) (*schema.Schema, error)
+type SchemaTransformer func(*file.Reader) (*schema.Schema, error)
 
 type TransformConfig struct {
 	Reader          parquet.ReaderAtSeeker
@@ -25,26 +25,27 @@ type TransformConfig struct {
 	Compression     *compress.Compression
 	TransformSchema SchemaTransformer
 	TransformColumn ColumnTransformer
-	BeforeClose     func(*file.Writer) error
+	BeforeClose     func(*file.Reader, *file.Writer) error
 }
 
 func getWriterProperties(config *TransformConfig, fileReader *file.Reader) (*parquet.WriterProperties, error) {
 	var writerProperties []parquet.WriterProperty
 	if config.Compression != nil {
 		writerProperties = append(writerProperties, parquet.WithCompression(*config.Compression))
-	}
-	// retain existing column compression (from the first row group)
-	if fileReader.NumRowGroups() > 0 {
-		rowGroupMetadata := fileReader.RowGroup(0).MetaData()
-		for colNum := 0; colNum < rowGroupMetadata.NumColumns(); colNum += 1 {
-			colChunkMetadata, err := rowGroupMetadata.ColumnChunk(colNum)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get column chunk metadata for column %d", colNum)
-			}
-			compression := colChunkMetadata.Compression()
-			if compression != compress.Codecs.Uncompressed {
-				colPath := colChunkMetadata.PathInSchema()
-				writerProperties = append(writerProperties, parquet.WithCompressionPath(colPath, compression))
+	} else {
+		// retain existing column compression (from the first row group)
+		if fileReader.NumRowGroups() > 0 {
+			rowGroupMetadata := fileReader.RowGroup(0).MetaData()
+			for colNum := 0; colNum < rowGroupMetadata.NumColumns(); colNum += 1 {
+				colChunkMetadata, err := rowGroupMetadata.ColumnChunk(colNum)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get column chunk metadata for column %d", colNum)
+				}
+				compression := colChunkMetadata.Compression()
+				if compression != compress.Codecs.Uncompressed {
+					colPath := colChunkMetadata.PathInSchema()
+					writerProperties = append(writerProperties, parquet.WithCompressionPath(colPath, compression))
+				}
 			}
 		}
 	}
@@ -65,11 +66,10 @@ func TransformByColumn(config *TransformConfig) error {
 		return fileReaderErr
 	}
 	defer fileReader.Close()
-	inputSchema := fileReader.MetaData().Schema
 
-	outputSchema := inputSchema
+	outputSchema := fileReader.MetaData().Schema
 	if config.TransformSchema != nil {
-		schema, err := config.TransformSchema(inputSchema)
+		schema, err := config.TransformSchema(fileReader)
 		if err != nil {
 			return err
 		}
@@ -136,7 +136,7 @@ func TransformByColumn(config *TransformConfig) error {
 	}
 
 	if config.BeforeClose != nil {
-		return config.BeforeClose(fileWriter)
+		return config.BeforeClose(fileReader, fileWriter)
 	}
 	return nil
 }

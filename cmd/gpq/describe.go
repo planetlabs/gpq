@@ -42,6 +42,7 @@ const (
 	ColType          = "Type"
 	ColAnnotation    = "Annotation"
 	ColRepetition    = "Repetition"
+	ColCompression   = "Compression"
 	ColEncoding      = "Encoding"
 	ColGeometryTypes = "Geometry Types"
 	ColBounds        = "Bounds"
@@ -69,7 +70,7 @@ func (c *DescribeCmd) Run() error {
 	}
 
 	info := &Info{
-		Schema:   buildSchema("", fileMetadata.Schema.Root()),
+		Schema:   buildSchema(fileReader, "", fileMetadata.Schema.Root()),
 		Metadata: metadata,
 		NumRows:  fileMetadata.NumRows,
 	}
@@ -83,7 +84,7 @@ func (c *DescribeCmd) Run() error {
 func (c *DescribeCmd) formatText(info *Info) error {
 	metadata := info.Metadata
 
-	header := table.Row{ColName, ColType, ColAnnotation, ColRepetition}
+	header := table.Row{ColName, ColType, ColAnnotation, ColRepetition, ColCompression}
 	columnConfigs := []table.ColumnConfig{}
 	if metadata != nil {
 		header = append(header, ColEncoding, ColGeometryTypes, ColBounds, ColDetail)
@@ -121,7 +122,7 @@ func (c *DescribeCmd) formatText(info *Info) error {
 		} else if field.Optional {
 			repetition = "0..1"
 		}
-		row := table.Row{name, field.Type, field.Annotation, repetition}
+		row := table.Row{name, field.Type, field.Annotation, repetition, field.Compression}
 		if metadata != nil {
 			geoColumn, ok := metadata.Columns[field.Name]
 			if !ok {
@@ -199,19 +200,41 @@ type Info struct {
 }
 
 type Schema struct {
-	Name       string    `json:"name,omitempty"`
-	Optional   bool      `json:"optional,omitempty"`
-	Repeated   bool      `json:"repeated,omitempty"`
-	Type       string    `json:"type,omitempty"`
-	Annotation string    `json:"annotation,omitempty"`
-	Fields     []*Schema `json:"fields,omitempty"`
+	Name        string    `json:"name,omitempty"`
+	Optional    bool      `json:"optional,omitempty"`
+	Repeated    bool      `json:"repeated,omitempty"`
+	Type        string    `json:"type,omitempty"`
+	Annotation  string    `json:"annotation,omitempty"`
+	Compression string    `json:"compression,omitempty"`
+	Fields      []*Schema `json:"fields,omitempty"`
 }
 
-func buildSchema(name string, node schema.Node) *Schema {
+func getCompression(fileReader *file.Reader, node schema.Node) string {
+	if _, ok := node.(*schema.GroupNode); ok {
+		return ""
+	}
+	if fileReader.NumRowGroups() == 0 {
+		return "unknown"
+	}
+	rowGroupReader := fileReader.RowGroup(0)
+	colIndex := fileReader.MetaData().Schema.ColumnIndexByName(node.Path())
+	if colIndex < 0 {
+		return "unknown"
+	}
+	col, err := rowGroupReader.MetaData().ColumnChunk(colIndex)
+	if err != nil {
+		return "unknown"
+	}
+	return strings.ToLower(col.Compression().String())
+}
+
+func buildSchema(fileReader *file.Reader, name string, node schema.Node) *Schema {
 	annotation := ""
 	logicalType := node.LogicalType()
 	if !logicalType.IsNone() {
 		annotation = strings.ToLower(logicalType.String())
+	} else if _, isGroup := node.(*schema.GroupNode); isGroup {
+		annotation = "group"
 	}
 
 	repetition := node.RepetitionType()
@@ -224,10 +247,11 @@ func buildSchema(name string, node schema.Node) *Schema {
 	}
 
 	field := &Schema{
-		Name:       name,
-		Optional:   optional,
-		Repeated:   repeated,
-		Annotation: annotation,
+		Name:        name,
+		Optional:    optional,
+		Repeated:    repeated,
+		Annotation:  annotation,
+		Compression: getCompression(fileReader, node),
 	}
 
 	if leaf, ok := node.(*schema.PrimitiveNode); ok {
@@ -259,7 +283,7 @@ func buildSchema(name string, node schema.Node) *Schema {
 		field.Fields = make([]*Schema, count)
 		for i := 0; i < count; i += 1 {
 			groupField := group.Field(i)
-			field.Fields[i] = buildSchema(groupField.Name(), groupField)
+			field.Fields[i] = buildSchema(fileReader, groupField.Name(), groupField)
 		}
 	}
 	return field

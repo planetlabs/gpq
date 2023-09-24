@@ -23,21 +23,29 @@ type ConvertOptions struct {
 	Compression        string
 }
 
+func getMetadata(fileReader *file.Reader, convertOptions *ConvertOptions) *Metadata {
+	metadata, err := GetMetadata(fileReader.MetaData().KeyValueMetadata())
+	if err != nil {
+		primaryColumn := DefaultGeometryColumn
+		if convertOptions.InputPrimaryColumn != "" {
+			primaryColumn = convertOptions.InputPrimaryColumn
+		}
+		metadata = &Metadata{
+			PrimaryColumn: primaryColumn,
+			Columns: map[string]*GeometryColumn{
+				primaryColumn: getDefaultGeometryColumn(),
+			},
+		}
+	}
+	if convertOptions.InputPrimaryColumn != "" && metadata.PrimaryColumn != convertOptions.InputPrimaryColumn {
+		metadata.PrimaryColumn = convertOptions.InputPrimaryColumn
+	}
+	return metadata
+}
+
 func FromParquet(input parquet.ReaderAtSeeker, output io.Writer, convertOptions *ConvertOptions) error {
 	if convertOptions == nil {
 		convertOptions = &ConvertOptions{}
-	}
-
-	primaryColumn := DefaultGeometryColumn
-	if convertOptions.InputPrimaryColumn != "" {
-		primaryColumn = convertOptions.InputPrimaryColumn
-	}
-
-	metadata := &Metadata{
-		PrimaryColumn: primaryColumn,
-		Columns: map[string]*GeometryColumn{
-			primaryColumn: getDefaultGeometryColumn(),
-		},
 	}
 
 	var compression *compress.Compression
@@ -49,95 +57,93 @@ func FromParquet(input parquet.ReaderAtSeeker, output io.Writer, convertOptions 
 		compression = &c
 	}
 
-	parquetSchema, schemaErr := pqutil.GetParquetSchema(input)
-	if schemaErr != nil {
-		return fmt.Errorf("trouble getting parquet schema: %w", schemaErr)
-	}
-
 	datasetInfo := geo.NewDatasetInfo(true)
-	for fieldNum := 0; fieldNum < parquetSchema.Root().NumFields(); fieldNum += 1 {
-		field := parquetSchema.Root().Field(fieldNum)
-		name := field.Name()
-		if _, ok := metadata.Columns[name]; !ok {
-			continue
-		}
-		if field.LogicalType() == pqutil.ParquetStringType {
-			datasetInfo.AddCollection(name)
-		}
-	}
-
-	var transformSchema pqutil.SchemaTransformer
-	var transformColumn pqutil.ColumnTransformer
-	if datasetInfo.NumCollections() > 0 {
-		transformSchema = func(inputSchema *schema.Schema) (*schema.Schema, error) {
-			inputRoot := inputSchema.Root()
-			numFields := inputRoot.NumFields()
-
-			fields := make([]schema.Node, numFields)
-			for fieldNum := 0; fieldNum < numFields; fieldNum += 1 {
-				inputField := inputRoot.Field(fieldNum)
-				if !datasetInfo.HasCollection(inputField.Name()) {
-					fields[fieldNum] = inputField
-					continue
-				}
-				outputField, err := schema.NewPrimitiveNode(inputField.Name(), inputField.RepetitionType(), parquet.Types.ByteArray, -1, -1)
-				if err != nil {
-					return nil, err
-				}
-				fields[fieldNum] = outputField
+	transformSchema := func(fileReader *file.Reader) (*schema.Schema, error) {
+		inputSchema := fileReader.MetaData().Schema
+		metadata := getMetadata(fileReader, convertOptions)
+		for fieldNum := 0; fieldNum < inputSchema.Root().NumFields(); fieldNum += 1 {
+			field := inputSchema.Root().Field(fieldNum)
+			name := field.Name()
+			if _, ok := metadata.Columns[name]; !ok {
+				continue
 			}
+			if field.LogicalType() == pqutil.ParquetStringType {
+				datasetInfo.AddCollection(name)
+			}
+		}
 
-			outputRoot, err := schema.NewGroupNode(inputRoot.Name(), inputRoot.RepetitionType(), fields, -1)
+		if datasetInfo.NumCollections() == 0 {
+			return inputSchema, nil
+		}
+
+		inputRoot := inputSchema.Root()
+		numFields := inputRoot.NumFields()
+
+		fields := make([]schema.Node, numFields)
+		for fieldNum := 0; fieldNum < numFields; fieldNum += 1 {
+			inputField := inputRoot.Field(fieldNum)
+			if !datasetInfo.HasCollection(inputField.Name()) {
+				fields[fieldNum] = inputField
+				continue
+			}
+			outputField, err := schema.NewPrimitiveNode(inputField.Name(), inputField.RepetitionType(), parquet.Types.ByteArray, -1, -1)
 			if err != nil {
 				return nil, err
 			}
-			return schema.NewSchema(outputRoot), nil
+			fields[fieldNum] = outputField
 		}
 
-		transformColumn = func(inputField *arrow.Field, outputField *arrow.Field, chunked *arrow.Chunked) (*arrow.Chunked, error) {
-			if !datasetInfo.HasCollection(inputField.Name) {
-				return chunked, nil
-			}
-			chunks := chunked.Chunks()
-			transformed := make([]arrow.Array, len(chunks))
-			builder := array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
-			defer builder.Release()
-
-			collectionInfo := geo.NewCollectionInfo(false)
-			for i, arr := range chunks {
-				stringArray, ok := arr.(*array.String)
-				if !ok {
-					return nil, fmt.Errorf("expected a string array for %q, got %v", inputField.Name, arr)
-				}
-				for rowNum := 0; rowNum < stringArray.Len(); rowNum += 1 {
-					if outputField.Nullable && stringArray.IsNull(rowNum) {
-						builder.AppendNull()
-						continue
-					}
-					str := stringArray.Value(rowNum)
-					geometry, wktErr := wkt.Unmarshal(str)
-					if wktErr != nil {
-						return nil, wktErr
-					}
-					value, wkbErr := wkb.Marshal(geometry)
-					if wkbErr != nil {
-						return nil, wkbErr
-					}
-					collectionInfo.AddType(geometry.GeoJSONType())
-					bounds := geometry.Bound()
-					collectionInfo.AddBounds(&bounds)
-					builder.Append(value)
-				}
-				transformed[i] = builder.NewArray()
-			}
-			datasetInfo.AddBounds(inputField.Name, collectionInfo.Bounds())
-			datasetInfo.AddTypes(inputField.Name, collectionInfo.Types())
-			chunked.Release()
-			return arrow.NewChunked(builder.Type(), transformed), nil
+		outputRoot, err := schema.NewGroupNode(inputRoot.Name(), inputRoot.RepetitionType(), fields, -1)
+		if err != nil {
+			return nil, err
 		}
+		return schema.NewSchema(outputRoot), nil
 	}
 
-	beforeClose := func(fileWriter *file.Writer) error {
+	transformColumn := func(inputField *arrow.Field, outputField *arrow.Field, chunked *arrow.Chunked) (*arrow.Chunked, error) {
+		if !datasetInfo.HasCollection(inputField.Name) {
+			return chunked, nil
+		}
+		chunks := chunked.Chunks()
+		transformed := make([]arrow.Array, len(chunks))
+		builder := array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
+		defer builder.Release()
+
+		collectionInfo := geo.NewCollectionInfo(false)
+		for i, arr := range chunks {
+			stringArray, ok := arr.(*array.String)
+			if !ok {
+				return nil, fmt.Errorf("expected a string array for %q, got %v", inputField.Name, arr)
+			}
+			for rowNum := 0; rowNum < stringArray.Len(); rowNum += 1 {
+				if outputField.Nullable && stringArray.IsNull(rowNum) {
+					builder.AppendNull()
+					continue
+				}
+				str := stringArray.Value(rowNum)
+				geometry, wktErr := wkt.Unmarshal(str)
+				if wktErr != nil {
+					return nil, wktErr
+				}
+				value, wkbErr := wkb.Marshal(geometry)
+				if wkbErr != nil {
+					return nil, wkbErr
+				}
+				collectionInfo.AddType(geometry.GeoJSONType())
+				bounds := geometry.Bound()
+				collectionInfo.AddBounds(&bounds)
+				builder.Append(value)
+			}
+			transformed[i] = builder.NewArray()
+		}
+		datasetInfo.AddBounds(inputField.Name, collectionInfo.Bounds())
+		datasetInfo.AddTypes(inputField.Name, collectionInfo.Types())
+		chunked.Release()
+		return arrow.NewChunked(builder.Type(), transformed), nil
+	}
+
+	beforeClose := func(fileReader *file.Reader, fileWriter *file.Writer) error {
+		metadata := getMetadata(fileReader, convertOptions)
 		for name, geometryCol := range metadata.Columns {
 			if !datasetInfo.HasCollection(name) {
 				continue
