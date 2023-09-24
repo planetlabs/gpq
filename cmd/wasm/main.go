@@ -21,8 +21,10 @@ import (
 	"strings"
 	"syscall/js"
 
+	"github.com/apache/arrow/go/v14/parquet/file"
 	"github.com/planetlabs/gpq/internal/geojson"
-	"github.com/segmentio/parquet-go"
+	"github.com/planetlabs/gpq/internal/geoparquet"
+	"github.com/planetlabs/gpq/internal/pqutil"
 )
 
 var uint8ArrayConstructor = js.Global().Get("Uint8Array")
@@ -56,24 +58,28 @@ var fromParquet = js.FuncOf(func(this js.Value, args []js.Value) any {
 	data := make([]byte, numBytes)
 	js.CopyBytesToGo(data, args[0])
 
-	input, fileErr := parquet.OpenFile(bytes.NewReader(data), int64(numBytes))
-	if fileErr != nil {
-		return returnFromError(fileErr)
-	}
-
 	output := &bytes.Buffer{}
-	convertErr := geojson.FromParquet(input, output)
+	convertErr := geojson.FromParquet(bytes.NewReader(data), output)
 	if convertErr != nil {
 		return returnFromError(convertErr)
 	}
 
-	metadata, _ := input.Lookup("geo")
+	reader, readerErr := file.NewParquetReader(bytes.NewReader(data))
+	if readerErr != nil {
+		return returnFromError(readerErr)
+	}
+	defer reader.Close()
+
+	metadata, metadataErr := geoparquet.GetMetadataValue(reader.MetaData().KeyValueMetadata())
+	if metadataErr != nil {
+		return returnFromError(metadataErr)
+	}
 
 	return returnFromValue(map[string]any{
 		"data":    output.String(),
 		"geo":     metadata,
-		"schema":  input.Schema().String(),
-		"records": input.NumRows(),
+		"schema":  pqutil.ParquetSchemaString(reader.MetaData().Schema),
+		"records": reader.NumRows(),
 	})
 })
 
@@ -93,12 +99,15 @@ var toParquet = js.FuncOf(func(this js.Value, args []js.Value) any {
 		return returnFromError(convertErr)
 	}
 
-	file, err := parquet.OpenFile(bytes.NewReader(output.Bytes()), int64(output.Len()))
-	if err != nil {
-		return returnFromError(err)
+	reader, readerErr := file.NewParquetReader(bytes.NewReader(output.Bytes()))
+	if readerErr != nil {
+		return returnFromError(readerErr)
 	}
 
-	metadata, _ := file.Lookup("geo")
+	metadata, metadataErr := geoparquet.GetMetadataValue(reader.MetaData().KeyValueMetadata())
+	if metadataErr != nil {
+		return returnFromError(metadataErr)
+	}
 
 	array := uint8ArrayConstructor.New(output.Len())
 	js.CopyBytesToJS(array, output.Bytes())
@@ -106,8 +115,8 @@ var toParquet = js.FuncOf(func(this js.Value, args []js.Value) any {
 	return returnFromValue(map[string]any{
 		"data":    array,
 		"geo":     metadata,
-		"schema":  file.Schema().String(),
-		"records": file.NumRows(),
+		"schema":  pqutil.ParquetSchemaString(reader.MetaData().Schema),
+		"records": reader.NumRows(),
 	})
 })
 

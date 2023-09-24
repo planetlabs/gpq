@@ -17,6 +17,7 @@ package validator_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/url"
@@ -25,11 +26,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/apache/arrow/go/v14/parquet"
+	"github.com/apache/arrow/go/v14/parquet/file"
 	"github.com/planetlabs/gpq/internal/geojson"
+	"github.com/planetlabs/gpq/internal/geoparquet"
+	"github.com/planetlabs/gpq/internal/pqutil"
 	"github.com/planetlabs/gpq/internal/validator"
 	"github.com/santhosh-tekuri/jsonschema/v5"
-	"github.com/segmentio/encoding/json"
-	"github.com/segmentio/parquet-go"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -76,20 +79,35 @@ func (s *Suite) readSpec(name string) *Spec {
 	return input
 }
 
-func (s *Suite) generateGeoParquet(name string) *parquet.File {
+func (s *Suite) copyWithMetadata(input parquet.ReaderAtSeeker, output io.Writer, metadata string) {
+	config := &pqutil.TransformConfig{
+		Reader: input,
+		Writer: output,
+		BeforeClose: func(fileWriter *file.Writer) error {
+			return fileWriter.AppendKeyValueMetadata(geoparquet.MetadataKey, metadata)
+		},
+	}
+	s.Require().NoError(pqutil.TransformByColumn(config))
+}
+
+func (s *Suite) generateGeoParquet(name string) *file.Reader {
 	spec := s.readSpec(name)
 
-	output := &bytes.Buffer{}
+	initialOutput := &bytes.Buffer{}
 
 	options := &geojson.ConvertOptions{
 		Metadata: string(spec.Metadata),
 	}
-	s.Require().NoError(geojson.ToParquet(bytes.NewReader(spec.Data), output, options))
+	s.Require().NoError(geojson.ToParquet(bytes.NewReader(spec.Data), initialOutput, options))
 
-	file, err := parquet.OpenFile(bytes.NewReader(output.Bytes()), int64(output.Len()))
+	input := bytes.NewReader(initialOutput.Bytes())
+	output := &bytes.Buffer{}
+	s.copyWithMetadata(input, output, string(spec.Metadata))
+
+	fileReader, err := file.NewParquetReader(bytes.NewReader(output.Bytes()))
 	s.Require().NoError(err)
 
-	return file
+	return fileReader
 }
 
 func (s *Suite) assertExpectedReport(name string, report *validator.Report) {
