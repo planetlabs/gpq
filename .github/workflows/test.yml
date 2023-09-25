@@ -51,6 +51,8 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '20'
+      - name: Build WASM
+        run: make wasm
       - name: Install Dependencies
         working-directory: web
         run: npm ci
