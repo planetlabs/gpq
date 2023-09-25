@@ -52,6 +52,8 @@ jobs:
         with:
           node-version: '20'
       - name: Install Dependencies
+        working-directory: web
         run: npm ci
       - name: Run Tests
+        working-directory: web
         run: npm test
