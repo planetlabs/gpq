@@ -15,7 +15,7 @@ import (
 	"github.com/apache/arrow/go/v14/parquet/file"
 	"github.com/apache/arrow/go/v14/parquet/pqarrow"
 	"github.com/apache/arrow/go/v14/parquet/schema"
-	"github.com/planetlabs/gpq/internal/geoparquet"
+	"github.com/planetlabs/gpq/internal/geojson"
 	"github.com/planetlabs/gpq/internal/pqutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,31 +89,11 @@ func ParquetToJSON(t *testing.T, input parquet.ReaderAtSeeker) string {
 	return string(data)
 }
 
-func GeoParquetFromStructs[T any](t *testing.T, rows []T, metadata *geoparquet.Metadata) parquet.ReaderAtSeeker {
-	parquetSchema, err := schema.NewSchemaFromStruct(rows[0])
-	require.NoError(t, err)
-
-	arrowSchema, err := pqarrow.FromParquet(parquetSchema, nil, nil)
-	require.NoError(t, err)
-
+func GeoParquetFromJSON(t *testing.T, data string) []byte {
+	input := strings.NewReader(data)
 	output := &bytes.Buffer{}
-	recordWriter, err := geoparquet.NewRecordWriter(&geoparquet.WriterConfig{
-		Writer:      output,
-		Metadata:    metadata,
-		ArrowSchema: arrowSchema,
-	})
-	require.NoError(t, err)
-
-	data, err := json.Marshal(rows)
-	require.NoError(t, err)
-
-	rec, _, err := array.RecordFromJSON(memory.DefaultAllocator, arrowSchema, strings.NewReader(string(data)))
-	require.NoError(t, err)
-
-	require.NoError(t, recordWriter.Write(rec))
-	require.NoError(t, recordWriter.Close())
-
-	return bytes.NewReader(output.Bytes())
+	require.NoError(t, geojson.ToParquet(input, output, nil))
+	return output.Bytes()
 }
 
 func ParquetFromStructs[T any](t *testing.T, rows []T) parquet.ReaderAtSeeker {

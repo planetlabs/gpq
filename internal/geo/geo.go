@@ -12,6 +12,23 @@ import (
 	orbjson "github.com/paulmach/orb/geojson"
 )
 
+type FeatureCollection struct {
+	Type     string     `json:"type"`
+	Features []*Feature `json:"features"`
+}
+
+var (
+	_ json.Marshaler = (*FeatureCollection)(nil)
+)
+
+func (c *FeatureCollection) MarshalJSON() ([]byte, error) {
+	m := map[string]any{
+		"type":     "FeatureCollection",
+		"features": c.Features,
+	}
+	return json.Marshal(m)
+}
+
 type Feature struct {
 	Id         any            `json:"id,omitempty"`
 	Type       string         `json:"type"`
@@ -120,7 +137,7 @@ func DecodeGeometry(value any, encoding string) (*orbjson.Geometry, error) {
 	return nil, fmt.Errorf("unsupported encoding: %s", encoding)
 }
 
-type CollectionInfo struct {
+type GeometryStats struct {
 	mutex *sync.RWMutex
 	minX  float64
 	maxX  float64
@@ -129,12 +146,12 @@ type CollectionInfo struct {
 	types map[string]bool
 }
 
-func NewCollectionInfo(concurrent bool) *CollectionInfo {
+func NewGeometryStats(concurrent bool) *GeometryStats {
 	var mutex *sync.RWMutex
 	if concurrent {
 		mutex = &sync.RWMutex{}
 	}
-	return &CollectionInfo{
+	return &GeometryStats{
 		mutex: mutex,
 		types: map[string]bool{},
 		minX:  math.MaxFloat64,
@@ -144,35 +161,35 @@ func NewCollectionInfo(concurrent bool) *CollectionInfo {
 	}
 }
 
-func (i *CollectionInfo) writeLock() {
+func (i *GeometryStats) writeLock() {
 	if i.mutex == nil {
 		return
 	}
 	i.mutex.Lock()
 }
 
-func (i *CollectionInfo) writeUnlock() {
+func (i *GeometryStats) writeUnlock() {
 	if i.mutex == nil {
 		return
 	}
 	i.mutex.Unlock()
 }
 
-func (i *CollectionInfo) readLock() {
+func (i *GeometryStats) readLock() {
 	if i.mutex == nil {
 		return
 	}
 	i.mutex.RLock()
 }
 
-func (i *CollectionInfo) readUnlock() {
+func (i *GeometryStats) readUnlock() {
 	if i.mutex == nil {
 		return
 	}
 	i.mutex.RUnlock()
 }
 
-func (i *CollectionInfo) AddBounds(bounds *orb.Bound) {
+func (i *GeometryStats) AddBounds(bounds *orb.Bound) {
 	i.writeLock()
 	minPoint := bounds.Min
 	minX := minPoint[0]
@@ -187,7 +204,7 @@ func (i *CollectionInfo) AddBounds(bounds *orb.Bound) {
 	i.writeUnlock()
 }
 
-func (i *CollectionInfo) Bounds() *orb.Bound {
+func (i *GeometryStats) Bounds() *orb.Bound {
 	i.readLock()
 	bounds := &orb.Bound{
 		Min: orb.Point{i.minX, i.minY},
@@ -197,13 +214,13 @@ func (i *CollectionInfo) Bounds() *orb.Bound {
 	return bounds
 }
 
-func (i *CollectionInfo) AddType(typ string) {
+func (i *GeometryStats) AddType(typ string) {
 	i.writeLock()
 	i.types[typ] = true
 	i.writeUnlock()
 }
 
-func (i *CollectionInfo) AddTypes(types []string) {
+func (i *GeometryStats) AddTypes(types []string) {
 	i.writeLock()
 	for _, typ := range types {
 		i.types[typ] = true
@@ -211,7 +228,7 @@ func (i *CollectionInfo) AddTypes(types []string) {
 	i.writeUnlock()
 }
 
-func (i *CollectionInfo) Types() []string {
+func (i *GeometryStats) Types() []string {
 	i.readLock()
 	types := []string{}
 	for typ, ok := range i.types {
@@ -223,92 +240,92 @@ func (i *CollectionInfo) Types() []string {
 	return types
 }
 
-type DatasetInfo struct {
+type DatasetStats struct {
 	mutex       *sync.RWMutex
-	collections map[string]*CollectionInfo
+	collections map[string]*GeometryStats
 }
 
-func NewDatasetInfo(concurrent bool) *DatasetInfo {
+func NewDatasetStats(concurrent bool) *DatasetStats {
 	var mutex *sync.RWMutex
 	if concurrent {
 		mutex = &sync.RWMutex{}
 	}
-	return &DatasetInfo{
+	return &DatasetStats{
 		mutex:       mutex,
-		collections: map[string]*CollectionInfo{},
+		collections: map[string]*GeometryStats{},
 	}
 }
 
-func (i *DatasetInfo) writeLock() {
+func (i *DatasetStats) writeLock() {
 	if i.mutex == nil {
 		return
 	}
 	i.mutex.Lock()
 }
 
-func (i *DatasetInfo) writeUnlock() {
+func (i *DatasetStats) writeUnlock() {
 	if i.mutex == nil {
 		return
 	}
 	i.mutex.Unlock()
 }
 
-func (i *DatasetInfo) readLock() {
+func (i *DatasetStats) readLock() {
 	if i.mutex == nil {
 		return
 	}
 	i.mutex.RLock()
 }
 
-func (i *DatasetInfo) readUnlock() {
+func (i *DatasetStats) readUnlock() {
 	if i.mutex == nil {
 		return
 	}
 	i.mutex.RUnlock()
 }
 
-func (i *DatasetInfo) NumCollections() int {
+func (i *DatasetStats) NumCollections() int {
 	i.readLock()
 	num := len(i.collections)
 	i.readUnlock()
 	return num
 }
 
-func (i *DatasetInfo) AddCollection(name string) {
+func (i *DatasetStats) AddCollection(name string) {
 	i.writeLock()
-	i.collections[name] = NewCollectionInfo(i.mutex != nil)
+	i.collections[name] = NewGeometryStats(i.mutex != nil)
 	i.writeUnlock()
 }
 
-func (i *DatasetInfo) HasCollection(name string) bool {
+func (i *DatasetStats) HasCollection(name string) bool {
 	i.readLock()
 	_, has := i.collections[name]
 	i.readUnlock()
 	return has
 }
 
-func (i *DatasetInfo) AddBounds(name string, bounds *orb.Bound) {
+func (i *DatasetStats) AddBounds(name string, bounds *orb.Bound) {
 	i.readLock()
 	collection := i.collections[name]
 	i.readUnlock()
 	collection.AddBounds(bounds)
 }
 
-func (i *DatasetInfo) Bounds(name string) *orb.Bound {
+func (i *DatasetStats) Bounds(name string) *orb.Bound {
 	i.readLock()
 	collection := i.collections[name]
 	i.readUnlock()
 	return collection.Bounds()
 }
 
-func (i *DatasetInfo) AddTypes(name string, types []string) {
+func (i *DatasetStats) AddTypes(name string, types []string) {
 	i.readLock()
 	collection := i.collections[name]
 	i.readUnlock()
 	collection.AddTypes(types)
 }
 
-func (i *DatasetInfo) Types(name string) []string {
+func (i *DatasetStats) Types(name string) []string {
 	i.readLock()
 	collection := i.collections[name]
 	i.readUnlock()

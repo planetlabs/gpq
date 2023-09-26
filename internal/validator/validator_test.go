@@ -142,13 +142,15 @@ func (s *Suite) TestValidCases() {
 
 	for _, c := range cases {
 		s.Run(c, func() {
-			resourcePath := path.Join("../testdata/cases", c)
+			filePath := path.Join("../testdata/cases", c)
+			data, err := os.ReadFile(filePath)
+			s.Require().NoError(err)
 
-			allReport, allErr := validatorAll.Validate(ctx, resourcePath)
+			allReport, allErr := validatorAll.Validate(ctx, bytes.NewReader(data), filePath)
 			s.Require().NoError(allErr)
 			s.assertExpectedReport("all-pass", allReport)
 
-			metaReport, metaErr := validatorMeta.Validate(ctx, resourcePath)
+			metaReport, metaErr := validatorMeta.Validate(ctx, bytes.NewReader(data), filePath)
 			s.Require().NoError(metaErr)
 			s.assertExpectedReport("all-pass-meta", metaReport)
 		})

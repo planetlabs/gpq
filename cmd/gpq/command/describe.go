@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package command
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -32,7 +34,7 @@ import (
 )
 
 type DescribeCmd struct {
-	Input    string `arg:"" name:"input" help:"Path to a GeoParquet file." type:"existingfile"`
+	Input    string `arg:"" optional:"" name:"input" help:"Path to a GeoParquet file.  If not provided, input is read from stdin." type:"existingfile"`
 	Format   string `help:"Report format.  Possible values: ${enum}." enum:"text, json" default:"text"`
 	Unpretty bool   `help:"No newlines or indentation in the JSON output."`
 }
@@ -50,11 +52,21 @@ const (
 )
 
 func (c *DescribeCmd) Run() error {
-	input, readErr := os.Open(c.Input)
-	if readErr != nil {
-		return fmt.Errorf("failed to read from %q: %w", c.Input, readErr)
+	var input ReaderAtSeeker
+	if c.Input == "" {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("trouble reading from stdin: %w", err)
+		}
+		input = bytes.NewReader(data)
+	} else {
+		i, readErr := os.Open(c.Input)
+		if readErr != nil {
+			return fmt.Errorf("failed to read from %q: %w", c.Input, readErr)
+		}
+		defer i.Close()
+		input = i
 	}
-	defer input.Close()
 
 	fileReader, fileErr := file.NewParquetReader(input)
 	if fileErr != nil {
@@ -69,7 +81,7 @@ func (c *DescribeCmd) Run() error {
 		}
 	}
 
-	info := &Info{
+	info := &DescribeInfo{
 		Schema:   buildSchema(fileReader, "", fileMetadata.Schema.Root()),
 		Metadata: metadata,
 		NumRows:  fileMetadata.NumRows,
@@ -81,7 +93,7 @@ func (c *DescribeCmd) Run() error {
 	return c.formatText(info)
 }
 
-func (c *DescribeCmd) formatText(info *Info) error {
+func (c *DescribeCmd) formatText(info *DescribeInfo) error {
 	metadata := info.Metadata
 
 	header := table.Row{ColName, ColType, ColAnnotation, ColRepetition, ColCompression}
@@ -180,7 +192,7 @@ func makeFooter(key string, value any, header table.Row) table.Row {
 	return row
 }
 
-func (c *DescribeCmd) formatJSON(info *Info) error {
+func (c *DescribeCmd) formatJSON(info *DescribeInfo) error {
 	encoder := json.NewEncoder(os.Stdout)
 	if !c.Unpretty {
 		encoder.SetIndent("", "  ")
@@ -193,20 +205,20 @@ func (c *DescribeCmd) formatJSON(info *Info) error {
 	return nil
 }
 
-type Info struct {
-	Schema   *Schema              `json:"schema"`
+type DescribeInfo struct {
+	Schema   *DescribeSchema      `json:"schema"`
 	Metadata *geoparquet.Metadata `json:"metadata"`
 	NumRows  int64                `json:"rows"`
 }
 
-type Schema struct {
-	Name        string    `json:"name,omitempty"`
-	Optional    bool      `json:"optional,omitempty"`
-	Repeated    bool      `json:"repeated,omitempty"`
-	Type        string    `json:"type,omitempty"`
-	Annotation  string    `json:"annotation,omitempty"`
-	Compression string    `json:"compression,omitempty"`
-	Fields      []*Schema `json:"fields,omitempty"`
+type DescribeSchema struct {
+	Name        string            `json:"name,omitempty"`
+	Optional    bool              `json:"optional,omitempty"`
+	Repeated    bool              `json:"repeated,omitempty"`
+	Type        string            `json:"type,omitempty"`
+	Annotation  string            `json:"annotation,omitempty"`
+	Compression string            `json:"compression,omitempty"`
+	Fields      []*DescribeSchema `json:"fields,omitempty"`
 }
 
 func getCompression(fileReader *file.Reader, node schema.Node) string {
@@ -228,7 +240,7 @@ func getCompression(fileReader *file.Reader, node schema.Node) string {
 	return strings.ToLower(col.Compression().String())
 }
 
-func buildSchema(fileReader *file.Reader, name string, node schema.Node) *Schema {
+func buildSchema(fileReader *file.Reader, name string, node schema.Node) *DescribeSchema {
 	annotation := ""
 	logicalType := node.LogicalType()
 	if !logicalType.IsNone() {
@@ -246,7 +258,7 @@ func buildSchema(fileReader *file.Reader, name string, node schema.Node) *Schema
 		repeated = true
 	}
 
-	field := &Schema{
+	field := &DescribeSchema{
 		Name:        name,
 		Optional:    optional,
 		Repeated:    repeated,
@@ -280,7 +292,7 @@ func buildSchema(fileReader *file.Reader, name string, node schema.Node) *Schema
 
 	if group, ok := node.(*schema.GroupNode); ok {
 		count := group.NumFields()
-		field.Fields = make([]*Schema, count)
+		field.Fields = make([]*DescribeSchema, count)
 		for i := 0; i < count; i += 1 {
 			groupField := group.Field(i)
 			field.Fields[i] = buildSchema(fileReader, groupField.Name(), groupField)

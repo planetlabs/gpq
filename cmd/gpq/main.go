@@ -16,17 +16,11 @@ package main
 
 import (
 	"github.com/alecthomas/kong"
+	"github.com/planetlabs/gpq/cmd/gpq/command"
 )
 
-var CLI struct {
-	Convert  ConvertCmd  `cmd:"" help:"Convert data from one format to another."`
-	Validate ValidateCmd `cmd:"" help:"Validate a GeoParquet file."`
-	Describe DescribeCmd `cmd:"" help:"Describe a GeoParquet file."`
-	Version  VersionCmd  `cmd:"" help:"Print the version of this program."`
-}
-
 func main() {
-	ctx := kong.Parse(&CLI)
+	ctx := kong.Parse(&command.CLI)
 	err := ctx.Run(ctx)
 	ctx.FatalIfErrorf(err)
 }

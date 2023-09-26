@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package command
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -25,9 +27,9 @@ import (
 )
 
 type ConvertCmd struct {
-	Input              string `arg:"" name:"input" help:"Input file." type:"existingfile"`
+	Input              string `arg:"" optional:"" name:"input" help:"Input file.  If not provided, input is read from stdin." type:"path"`
 	From               string `help:"Input file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet, parquet" default:"auto"`
-	Output             string `arg:"" name:"output" help:"Output file." type:"path"`
+	Output             string `arg:"" optional:"" name:"output" help:"Output file.  If not provided, output is written to stdout." type:"path"`
 	To                 string `help:"Output file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet" default:"auto"`
 	Min                int    `help:"Minimum number of features to consider when building a schema." default:"10"`
 	Max                int    `help:"Maximum number of features to consider when building a schema." default:"100"`
@@ -53,6 +55,9 @@ var validTypes = map[FormatType]bool{
 }
 
 func parseFormatType(format string) FormatType {
+	if format == "" {
+		return AutoType
+	}
 	ft := FormatType(strings.ToLower(format))
 	if !validTypes[ft] {
 		return UnknownType
@@ -73,34 +78,72 @@ func getFormatType(filename string) FormatType {
 	return UnknownType
 }
 
+func hasStdin() bool {
+	stats, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return stats.Size() > 0
+}
+
 func (c *ConvertCmd) Run() error {
+	inputSource := c.Input
+	outputSource := c.Output
+
+	if outputSource == "" && hasStdin() {
+		outputSource = inputSource
+		inputSource = ""
+	}
+
 	outputFormat := parseFormatType(c.To)
 	if outputFormat == AutoType {
-		outputFormat = getFormatType(c.Output)
+		if outputSource == "" {
+			return fmt.Errorf("when writing to stdout, the --to option must be provided to determine the output format")
+		}
+		outputFormat = getFormatType(outputSource)
 	}
 	if outputFormat == UnknownType {
-		return fmt.Errorf("could not determine output format for %s", c.Output)
+		return fmt.Errorf("could not determine output format for %s", outputSource)
 	}
 
 	inputFormat := parseFormatType(c.From)
 	if inputFormat == AutoType {
-		inputFormat = getFormatType(c.Input)
+		if inputSource == "" {
+			return fmt.Errorf("when reading from stdin, the --from option must be provided to determine the input format")
+		}
+		inputFormat = getFormatType(inputSource)
 	}
 	if inputFormat == UnknownType {
-		return fmt.Errorf("could not determine input format for %s", c.Input)
+		return fmt.Errorf("could not determine input format for %s", inputSource)
 	}
 
-	input, readErr := os.Open(c.Input)
-	if readErr != nil {
-		return fmt.Errorf("failed to read from %q: %w", c.Input, readErr)
+	var input ReaderAtSeeker
+	if inputSource == "" {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("trouble reading from stdin: %w", err)
+		}
+		input = bytes.NewReader(data)
+	} else {
+		i, readErr := os.Open(inputSource)
+		if readErr != nil {
+			return fmt.Errorf("failed to read from %q: %w", inputSource, readErr)
+		}
+		defer i.Close()
+		input = i
 	}
-	defer input.Close()
 
-	output, createErr := os.Create(c.Output)
-	if createErr != nil {
-		return fmt.Errorf("failed to open %q for writing: %w", c.Output, createErr)
+	var output *os.File
+	if outputSource == "" {
+		output = os.Stdout
+	} else {
+		o, createErr := os.Create(outputSource)
+		if createErr != nil {
+			return fmt.Errorf("failed to open %q for writing: %w", outputSource, createErr)
+		}
+		defer o.Close()
+		output = o
 	}
-	defer output.Close()
 
 	if inputFormat == GeoJSONType {
 		if outputFormat != ParquetType && outputFormat != GeoParquetType {

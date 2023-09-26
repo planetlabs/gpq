@@ -20,9 +20,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/apache/arrow/go/v14/arrow/array"
+	"github.com/apache/arrow/go/v14/parquet"
 	"github.com/apache/arrow/go/v14/parquet/file"
 	"github.com/paulmach/orb"
 	"github.com/planetlabs/gpq/internal/geo"
@@ -93,16 +93,10 @@ type Check struct {
 }
 
 // Validate opens and validates a GeoParquet file.
-func (v *Validator) Validate(ctx context.Context, resource string) (*Report, error) {
-	input, inputErr := os.Open(resource)
-	if inputErr != nil {
-		return nil, fmt.Errorf("failed to read from %q: %w", resource, inputErr)
-	}
-	defer input.Close()
-
+func (v *Validator) Validate(ctx context.Context, input parquet.ReaderAtSeeker, name string) (*Report, error) {
 	reader, readerErr := file.NewParquetReader(input)
 	if readerErr != nil {
-		return nil, fmt.Errorf("failed to create parquet reader from %q: %w", resource, readerErr)
+		return nil, fmt.Errorf("failed to create parquet reader from %q: %w", name, readerErr)
 	}
 	defer reader.Close()
 

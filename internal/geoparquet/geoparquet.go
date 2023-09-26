@@ -57,7 +57,7 @@ func FromParquet(input parquet.ReaderAtSeeker, output io.Writer, convertOptions 
 		compression = &c
 	}
 
-	datasetInfo := geo.NewDatasetInfo(true)
+	datasetInfo := geo.NewDatasetStats(true)
 	transformSchema := func(fileReader *file.Reader) (*schema.Schema, error) {
 		inputSchema := fileReader.MetaData().Schema
 		metadata := getMetadata(fileReader, convertOptions)
@@ -109,7 +109,7 @@ func FromParquet(input parquet.ReaderAtSeeker, output io.Writer, convertOptions 
 		builder := array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
 		defer builder.Release()
 
-		collectionInfo := geo.NewCollectionInfo(false)
+		collectionInfo := geo.NewGeometryStats(false)
 		for i, arr := range chunks {
 			stringArray, ok := arr.(*array.String)
 			if !ok {
