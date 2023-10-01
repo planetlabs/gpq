@@ -2,7 +2,9 @@ package pqutil_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"testing"
 
@@ -83,7 +85,7 @@ func TestTransformByColumn(t *testing.T) {
 
 	for i, c := range cases {
 		t.Run(fmt.Sprintf("%s (case %d)", c.name, i), func(t *testing.T) {
-			input := test.ParquetFromJSON(t, c.data)
+			input := test.ParquetFromJSON(t, c.data, nil)
 			output := &bytes.Buffer{}
 			config := c.config
 			if config == nil {
@@ -118,6 +120,97 @@ func TestTransformByColumn(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestTransformByRowGroupLength(t *testing.T) {
+	numRows := 100
+	rows := make([]map[string]any, numRows)
+	for i := 0; i < numRows; i += 1 {
+		rows[i] = map[string]any{"num": i}
+	}
+	inputData, err := json.Marshal(rows)
+	require.NoError(t, err)
+
+	cases := []struct {
+		name                string
+		inputRowGroupLength int
+		config              *pqutil.TransformConfig
+	}{
+		{
+			name:                "no row group length, use input",
+			inputRowGroupLength: 50,
+		},
+		{
+			name:                "read row group length 50, write 13",
+			inputRowGroupLength: 50,
+			config: &pqutil.TransformConfig{
+				RowGroupLength: 13,
+			},
+		},
+		{
+			name:                "read row group length 50, write 60",
+			inputRowGroupLength: 50,
+			config: &pqutil.TransformConfig{
+				RowGroupLength: 60,
+			},
+		},
+		{
+			name:                "read row group length 50, write 110",
+			inputRowGroupLength: 50,
+			config: &pqutil.TransformConfig{
+				RowGroupLength: 110,
+			},
+		},
+		{
+			name:                "read row group length 110, write 110",
+			inputRowGroupLength: 110,
+			config: &pqutil.TransformConfig{
+				RowGroupLength: 110,
+			},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(fmt.Sprintf("%s (case %d)", c.name, i), func(t *testing.T) {
+			writerProperties := parquet.NewWriterProperties(parquet.WithMaxRowGroupLength(int64(c.inputRowGroupLength)))
+			input := test.ParquetFromJSON(t, string(inputData), writerProperties)
+			output := &bytes.Buffer{}
+			config := c.config
+			if config == nil {
+				config = &pqutil.TransformConfig{}
+			}
+			config.Reader = input
+			config.Writer = output
+
+			require.NoError(t, pqutil.TransformByColumn(config))
+
+			outputAsJSON := test.ParquetToJSON(t, bytes.NewReader(output.Bytes()))
+			assert.JSONEq(t, string(inputData), outputAsJSON)
+
+			fileReader, err := file.NewParquetReader(bytes.NewReader(output.Bytes()))
+			require.NoError(t, err)
+			defer fileReader.Close()
+
+			var expectedNumRowGroups int
+			if config.RowGroupLength > 0 {
+				expectedNumRowGroups = int(math.Ceil(float64(numRows) / float64(c.config.RowGroupLength)))
+			} else {
+				inputFileReader, err := file.NewParquetReader(input)
+				require.NoError(t, err)
+				defer inputFileReader.Close()
+				expectedNumRowGroups = inputFileReader.NumRowGroups()
+			}
+			require.Equal(t, expectedNumRowGroups, fileReader.NumRowGroups())
+
+			if config.RowGroupLength > 0 {
+				for rowGroupIndex := 0; rowGroupIndex < fileReader.NumRowGroups(); rowGroupIndex += 1 {
+					numRows := fileReader.MetaData().RowGroups[rowGroupIndex].NumRows
+					require.LessOrEqual(t, numRows, int64(config.RowGroupLength), "row group index: %d", rowGroupIndex)
+				}
+			}
+		})
+
 	}
 }
 
@@ -200,7 +293,7 @@ func TestTransformColumn(t *testing.T) {
 		return arrow.NewChunked(builder.Type(), transformed), nil
 	}
 
-	input := test.ParquetFromJSON(t, data)
+	input := test.ParquetFromJSON(t, data, nil)
 	output := &bytes.Buffer{}
 	config := &pqutil.TransformConfig{
 		Reader:          input,

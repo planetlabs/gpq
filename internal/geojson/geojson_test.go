@@ -105,6 +105,42 @@ func TestToParquet(t *testing.T) {
 	assert.JSONEq(t, string(expected), geojsonBuffer.String())
 }
 
+func TestToParquetRowGroupLength3(t *testing.T) {
+	geojsonFile, openErr := os.Open("testdata/ten-points.geojson")
+	require.NoError(t, openErr)
+
+	parquetBuffer := &bytes.Buffer{}
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, &geojson.ConvertOptions{
+		RowGroupLength: 3,
+	})
+	assert.NoError(t, toParquetErr)
+
+	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
+	defer fileReader.Close()
+
+	assert.Equal(t, 4, fileReader.NumRowGroups())
+}
+
+func TestToParquetRowGroupLength5(t *testing.T) {
+	geojsonFile, openErr := os.Open("testdata/ten-points.geojson")
+	require.NoError(t, openErr)
+
+	parquetBuffer := &bytes.Buffer{}
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, &geojson.ConvertOptions{
+		RowGroupLength: 5,
+	})
+	assert.NoError(t, toParquetErr)
+
+	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
+	defer fileReader.Close()
+
+	assert.Equal(t, 2, fileReader.NumRowGroups())
+}
+
 func TestToParquetMismatchedTypes(t *testing.T) {
 	geojsonFile, openErr := os.Open("testdata/mismatched-types.geojson")
 	require.NoError(t, openErr)

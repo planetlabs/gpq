@@ -23,6 +23,7 @@ type TransformConfig struct {
 	Reader          parquet.ReaderAtSeeker
 	Writer          io.Writer
 	Compression     *compress.Compression
+	RowGroupLength  int
 	TransformSchema SchemaTransformer
 	TransformColumn ColumnTransformer
 	BeforeClose     func(*file.Reader, *file.Writer) error
@@ -48,6 +49,10 @@ func getWriterProperties(config *TransformConfig, fileReader *file.Reader) (*par
 				}
 			}
 		}
+	}
+
+	if config.RowGroupLength > 0 {
+		writerProperties = append(writerProperties, parquet.WithMaxRowGroupLength(int64(config.RowGroupLength)))
 	}
 
 	return parquet.NewWriterProperties(writerProperties...), nil
@@ -104,33 +109,84 @@ func TransformByColumn(config *TransformConfig) error {
 
 	ctx := pqarrow.NewArrowWriteContext(context.Background(), nil)
 
-	numRowGroups := fileReader.NumRowGroups()
-	for rowGroupIndex := 0; rowGroupIndex < numRowGroups; rowGroupIndex += 1 {
-		rowGroupReader := arrowReader.RowGroup(rowGroupIndex)
-		rowGroupWriter := fileWriter.AppendRowGroup()
+	if config.RowGroupLength > 0 {
+		columnReaders := make([]*pqarrow.ColumnReader, numFields)
 		for fieldNum := 0; fieldNum < numFields; fieldNum += 1 {
-			arr, readErr := rowGroupReader.Column(fieldNum).Read(ctx)
-			if readErr != nil {
-				return readErr
+			colReader, err := arrowReader.GetColumn(ctx, fieldNum)
+			if err != nil {
+				return err
 			}
-			if config.TransformColumn != nil {
-				inputField := inputManifest.Fields[fieldNum].Field
-				outputField := outputManifest.Fields[fieldNum].Field
-				transformed, err := config.TransformColumn(inputField, outputField, arr)
-				if err != nil {
+			columnReaders[fieldNum] = colReader
+		}
+
+		numRows := fileReader.NumRows()
+		numRowsWritten := int64(0)
+		for {
+			rowGroupWriter := fileWriter.AppendRowGroup()
+			for fieldNum := 0; fieldNum < numFields; fieldNum += 1 {
+				colReader := columnReaders[fieldNum]
+				arr, readErr := colReader.NextBatch(int64(config.RowGroupLength))
+				if readErr != nil {
+					return readErr
+				}
+				if config.TransformColumn != nil {
+					inputField := inputManifest.Fields[fieldNum].Field
+					outputField := outputManifest.Fields[fieldNum].Field
+					transformed, err := config.TransformColumn(inputField, outputField, arr)
+					if err != nil {
+						return err
+					}
+					if transformed.DataType() != outputField.Type {
+						return fmt.Errorf("transform generated an unexpected type, got %s, expected %s", transformed.DataType().Name(), outputField.Type.Name())
+					}
+					arr = transformed
+				}
+				colWriter, colWriterErr := pqarrow.NewArrowColumnWriter(arr, 0, int64(arr.Len()), outputManifest, rowGroupWriter, fieldNum)
+				if colWriterErr != nil {
+					return colWriterErr
+				}
+				if err := colWriter.Write(ctx); err != nil {
 					return err
 				}
-				if transformed.DataType() != outputField.Type {
-					return fmt.Errorf("transform generated an unexpected type, got %s, expected %s", transformed.DataType().Name(), outputField.Type.Name())
-				}
-				arr = transformed
 			}
-			colWriter, colWriterErr := pqarrow.NewArrowColumnWriter(arr, 0, int64(arr.Len()), outputManifest, rowGroupWriter, fieldNum)
-			if colWriterErr != nil {
-				return colWriterErr
-			}
-			if err := colWriter.Write(ctx); err != nil {
+			numRowsInGroup, err := rowGroupWriter.NumRows()
+			if err != nil {
 				return err
+			}
+			numRowsWritten += int64(numRowsInGroup)
+			if numRowsWritten >= numRows {
+				break
+			}
+		}
+	} else {
+		numRowGroups := fileReader.NumRowGroups()
+		for rowGroupIndex := 0; rowGroupIndex < numRowGroups; rowGroupIndex += 1 {
+			rowGroupReader := arrowReader.RowGroup(rowGroupIndex)
+			rowGroupWriter := fileWriter.AppendRowGroup()
+			for fieldNum := 0; fieldNum < numFields; fieldNum += 1 {
+				arr, readErr := rowGroupReader.Column(fieldNum).Read(ctx)
+				if readErr != nil {
+					return readErr
+				}
+				if config.TransformColumn != nil {
+					inputField := inputManifest.Fields[fieldNum].Field
+					outputField := outputManifest.Fields[fieldNum].Field
+					transformed, err := config.TransformColumn(inputField, outputField, arr)
+					if err != nil {
+						return err
+					}
+					if transformed.DataType() != outputField.Type {
+						return fmt.Errorf("transform generated an unexpected type, got %s, expected %s", transformed.DataType().Name(), outputField.Type.Name())
+					}
+					arr = transformed
+				}
+				colWriter, colWriterErr := pqarrow.NewArrowColumnWriter(arr, 0, int64(arr.Len()), outputManifest, rowGroupWriter, fieldNum)
+				if colWriterErr != nil {
+					return colWriterErr
+				}
+				if err := colWriter.Write(ctx); err != nil {
+					return err
+				}
 			}
 		}
 	}

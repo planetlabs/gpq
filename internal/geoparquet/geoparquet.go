@@ -21,6 +21,7 @@ import (
 type ConvertOptions struct {
 	InputPrimaryColumn string
 	Compression        string
+	RowGroupLength     int
 }
 
 func getMetadata(fileReader *file.Reader, convertOptions *ConvertOptions) *Metadata {
@@ -171,6 +172,7 @@ func FromParquet(input parquet.ReaderAtSeeker, output io.Writer, convertOptions 
 		TransformColumn: transformColumn,
 		BeforeClose:     beforeClose,
 		Compression:     compression,
+		RowGroupLength:  convertOptions.RowGroupLength,
 	}
 
 	return pqutil.TransformByColumn(config)
