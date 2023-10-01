@@ -21,7 +21,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func ParquetFromJSON(t *testing.T, data string) parquet.ReaderAtSeeker {
+func ParquetFromJSON(t *testing.T, data string, writerProperties *parquet.WriterProperties) parquet.ReaderAtSeeker {
+	if writerProperties == nil {
+		writerProperties = parquet.NewWriterProperties()
+	}
 	var rows []map[string]any
 	require.NoError(t, json.Unmarshal([]byte(data), &rows))
 
@@ -41,7 +44,7 @@ func ParquetFromJSON(t *testing.T, data string) parquet.ReaderAtSeeker {
 
 	output := &bytes.Buffer{}
 
-	writer, err := pqarrow.NewFileWriter(schema, output, parquet.NewWriterProperties(), pqarrow.DefaultWriterProps())
+	writer, err := pqarrow.NewFileWriter(schema, output, writerProperties, pqarrow.DefaultWriterProps())
 	require.NoError(t, err)
 
 	require.NoError(t, writer.WriteBuffered(rec))
