@@ -19,8 +19,14 @@ import (
 	"github.com/planetlabs/gpq/cmd/gpq/command"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	ctx := kong.Parse(&command.CLI)
-	err := ctx.Run(ctx)
+	err := ctx.Run(ctx, &command.VersionInfo{Version: version, Commit: commit, Date: date})
 	ctx.FatalIfErrorf(err)
 }
