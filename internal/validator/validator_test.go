@@ -28,11 +28,15 @@ import (
 
 	"github.com/apache/arrow/go/v14/parquet"
 	"github.com/apache/arrow/go/v14/parquet/file"
+	"github.com/paulmach/orb"
+	"github.com/paulmach/orb/encoding/wkb"
 	"github.com/planetlabs/gpq/internal/geojson"
 	"github.com/planetlabs/gpq/internal/geoparquet"
 	"github.com/planetlabs/gpq/internal/pqutil"
+	"github.com/planetlabs/gpq/internal/test"
 	"github.com/planetlabs/gpq/internal/validator"
 	"github.com/santhosh-tekuri/jsonschema/v5"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -133,6 +137,7 @@ func (s *Suite) TearDownSuite() {
 func (s *Suite) TestValidCases() {
 	cases := []string{
 		"example-v1.0.0-beta.1.parquet",
+		"example-v1.0.0.parquet",
 	}
 
 	validatorAll := validator.New(false)
@@ -157,11 +162,168 @@ func (s *Suite) TestValidCases() {
 	}
 }
 
+func (s *Suite) TestConvertedWKT() {
+	type Row struct {
+		Name     string `parquet:"name=name, logical=String" json:"name"`
+		Geometry string `parquet:"name=geometry, logical=String" json:"geometry"`
+	}
+
+	rows := []*Row{
+		{
+			Name:     "test-point-1",
+			Geometry: "POINT (1 2)",
+		},
+		{
+			Name:     "test-point-2",
+			Geometry: "POINT (3 4)",
+		},
+	}
+
+	input := test.ParquetFromStructs(s.T(), rows)
+
+	geoparquetBytes := &bytes.Buffer{}
+	s.Require().NoError(geoparquet.FromParquet(input, geoparquetBytes, nil))
+
+	filePath := "test-wkt.parquet"
+	ctx := context.Background()
+	validatorAll := validator.New(false)
+	validatorMeta := validator.New(true)
+
+	allReport, allErr := validatorAll.Validate(ctx, bytes.NewReader(geoparquetBytes.Bytes()), filePath)
+	s.Require().NoError(allErr)
+	s.assertExpectedReport("all-pass", allReport)
+
+	metaReport, metaErr := validatorMeta.Validate(ctx, bytes.NewReader(geoparquetBytes.Bytes()), filePath)
+	s.Require().NoError(metaErr)
+	s.assertExpectedReport("all-pass-meta", metaReport)
+}
+
+func (s *Suite) TestConvertedAltPrimaryColumnWKT() {
+	type Row struct {
+		Name        string `parquet:"name=name, logical=String" json:"name"`
+		AltGeometry string `parquet:"name=alt_geometry, logical=String" json:"alt_geometry"`
+	}
+
+	rows := []*Row{
+		{
+			Name:        "test-point-1",
+			AltGeometry: "POINT (1 2)",
+		},
+		{
+			Name:        "test-point-2",
+			AltGeometry: "POINT (3 4)",
+		},
+	}
+
+	input := test.ParquetFromStructs(s.T(), rows)
+
+	geoparquetBytes := &bytes.Buffer{}
+	convertOptions := &geoparquet.ConvertOptions{
+		InputPrimaryColumn: "alt_geometry",
+	}
+	s.Require().NoError(geoparquet.FromParquet(input, geoparquetBytes, convertOptions))
+
+	filePath := "test-wkb.parquet"
+	ctx := context.Background()
+	validatorAll := validator.New(false)
+	validatorMeta := validator.New(true)
+
+	allReport, allErr := validatorAll.Validate(ctx, bytes.NewReader(geoparquetBytes.Bytes()), filePath)
+	s.Require().NoError(allErr)
+	s.assertExpectedReport("all-pass", allReport)
+
+	metaReport, metaErr := validatorMeta.Validate(ctx, bytes.NewReader(geoparquetBytes.Bytes()), filePath)
+	s.Require().NoError(metaErr)
+	s.assertExpectedReport("all-pass-meta", metaReport)
+}
+
+func toWKB(t *testing.T, geometry orb.Geometry) []byte {
+	data, err := wkb.Marshal(geometry)
+	require.NoError(t, err)
+	return data
+}
+
+func (s *Suite) TestConvertedWKB() {
+	type Row struct {
+		Name     string `parquet:"name=name, logical=String" json:"name"`
+		Geometry []byte `parquet:"name=geometry" json:"geometry"`
+	}
+
+	rows := []*Row{
+		{
+			Name:     "test-point-1",
+			Geometry: toWKB(s.T(), orb.Point{1, 2}),
+		},
+		{
+			Name:     "test-point-2",
+			Geometry: toWKB(s.T(), orb.Point{3, 4}),
+		},
+	}
+
+	input := test.ParquetFromStructs(s.T(), rows)
+
+	geoparquetBytes := &bytes.Buffer{}
+	s.Require().NoError(geoparquet.FromParquet(input, geoparquetBytes, nil))
+
+	filePath := "test-wkb.parquet"
+	ctx := context.Background()
+	validatorAll := validator.New(false)
+	validatorMeta := validator.New(true)
+
+	allReport, allErr := validatorAll.Validate(ctx, bytes.NewReader(geoparquetBytes.Bytes()), filePath)
+	s.Require().NoError(allErr)
+	s.assertExpectedReport("all-pass", allReport)
+
+	metaReport, metaErr := validatorMeta.Validate(ctx, bytes.NewReader(geoparquetBytes.Bytes()), filePath)
+	s.Require().NoError(metaErr)
+	s.assertExpectedReport("all-pass-meta", metaReport)
+}
+
+func (s *Suite) TestConvertedAltPrimaryColumnWKB() {
+	type Row struct {
+		Name        string `parquet:"name=name, logical=String" json:"name"`
+		AltGeometry []byte `parquet:"name=alt_geometry" json:"alt_geometry"`
+	}
+
+	rows := []*Row{
+		{
+			Name:        "test-point-1",
+			AltGeometry: toWKB(s.T(), orb.Point{1, 2}),
+		},
+		{
+			Name:        "test-point-2",
+			AltGeometry: toWKB(s.T(), orb.Point{3, 4}),
+		},
+	}
+
+	input := test.ParquetFromStructs(s.T(), rows)
+
+	geoparquetBytes := &bytes.Buffer{}
+	convertOptions := &geoparquet.ConvertOptions{
+		InputPrimaryColumn: "alt_geometry",
+	}
+	s.Require().NoError(geoparquet.FromParquet(input, geoparquetBytes, convertOptions))
+
+	filePath := "test-wkb.parquet"
+	ctx := context.Background()
+	validatorAll := validator.New(false)
+	validatorMeta := validator.New(true)
+
+	allReport, allErr := validatorAll.Validate(ctx, bytes.NewReader(geoparquetBytes.Bytes()), filePath)
+	s.Require().NoError(allErr)
+	s.assertExpectedReport("all-pass", allReport)
+
+	metaReport, metaErr := validatorMeta.Validate(ctx, bytes.NewReader(geoparquetBytes.Bytes()), filePath)
+	s.Require().NoError(metaErr)
+	s.assertExpectedReport("all-pass-meta", metaReport)
+}
+
 func (s *Suite) TestReport() {
 	cases := []string{
 		"all-pass",
 		"all-pass-meta",
 		"all-pass-minimal",
+		"complex-types",
 		"bad-metadata-type",
 		"missing-version",
 		"missing-primary-column",

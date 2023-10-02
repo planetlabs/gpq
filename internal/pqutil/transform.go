@@ -175,9 +175,6 @@ func TransformByColumn(config *TransformConfig) error {
 					if err != nil {
 						return err
 					}
-					if transformed.DataType() != outputField.Type {
-						return fmt.Errorf("transform generated an unexpected type, got %s, expected %s", transformed.DataType().Name(), outputField.Type.Name())
-					}
 					arr = transformed
 				}
 				colWriter, colWriterErr := pqarrow.NewArrowColumnWriter(arr, 0, int64(arr.Len()), outputManifest, rowGroupWriter, fieldNum)
