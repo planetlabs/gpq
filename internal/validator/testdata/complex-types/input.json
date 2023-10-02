@@ -1,0 +1,85 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "primary_column": "geometry",
+    "columns": {
+      "geometry": {
+        "encoding": "WKB",
+        "geometry_types": [
+          "Point"
+        ],
+        "orientation": "counterclockwise",
+        "edges": "planar",
+        "bbox": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "epoch": 2021.47,
+        "crs": {
+          "$schema": "https://proj.org/schemas/v0.5/projjson.schema.json",
+          "type": "GeographicCRS",
+          "name": "WGS 84 longitude-latitude",
+          "datum": {
+            "type": "GeodeticReferenceFrame",
+            "name": "World Geodetic System 1984",
+            "ellipsoid": {
+              "name": "WGS 84",
+              "semi_major_axis": 6378137,
+              "inverse_flattening": 298.257223563
+            }
+          },
+          "coordinate_system": {
+            "subtype": "ellipsoidal",
+            "axis": [
+              {
+                "name": "Geodetic longitude",
+                "abbreviation": "Lon",
+                "direction": "east",
+                "unit": "degree"
+              },
+              {
+                "name": "Geodetic latitude",
+                "abbreviation": "Lat",
+                "direction": "north",
+                "unit": "degree"
+              }
+            ]
+          },
+          "id": {
+            "authority": "OGC",
+            "code": "CRS84"
+          }
+        }
+      }
+    }
+  },
+  "data": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "numbers": [2, 4, 6, 8],
+          "strings": ["chicken", "soup"],
+          "object": {
+            "name": "Bob"
+          },
+          "names": {
+            "common": [
+              {"value": "Hello", "language": "en"}
+            ]
+          }
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            0,
+            0
+          ]
+        }
+      }
+    ]
+  }
+}

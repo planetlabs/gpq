@@ -432,13 +432,13 @@ func GeometryUngrouped() Rule {
 		title: "geometry columns must not be grouped",
 		validate: func(info *FileInfo) error {
 			metadata := info.Metadata
-			sc := info.File.MetaData().Schema
+			root := info.File.MetaData().Schema.Root()
 			for name := range metadata.Columns {
-				index := sc.ColumnIndexByName(name)
+				index := root.FieldIndexByName(name)
 				if index < 0 {
 					return fatal("missing geometry column %q", name)
 				}
-				_, ok := sc.Root().Field(index).(*schema.PrimitiveNode)
+				_, ok := root.Field(index).(*schema.PrimitiveNode)
 				if !ok {
 					return fmt.Errorf("column %q must not be a group", name)
 				}
@@ -454,14 +454,14 @@ func GeometryDataType() Rule {
 		title: "geometry columns must be stored using the BYTE_ARRAY parquet type",
 		validate: func(info *FileInfo) error {
 			metadata := info.Metadata
-			sc := info.File.MetaData().Schema
+			root := info.File.MetaData().Schema.Root()
 			for name := range metadata.Columns {
-				index := sc.ColumnIndexByName(name)
+				index := root.FieldIndexByName(name)
 				if index < 0 {
 					return fatal("missing geometry column %q", name)
 				}
 
-				field, ok := sc.Root().Field(index).(*schema.PrimitiveNode)
+				field, ok := root.Field(index).(*schema.PrimitiveNode)
 				if !ok {
 					return fatal("expected primitive column for %q", name)
 				}
@@ -480,14 +480,14 @@ func GeometryRepetition() Rule {
 		title: "geometry columns must be required or optional, not repeated",
 		validate: func(info *FileInfo) error {
 			metadata := info.Metadata
-			sc := info.File.MetaData().Schema
+			root := info.File.MetaData().Schema.Root()
 			for name := range metadata.Columns {
-				index := sc.ColumnIndexByName(name)
+				index := root.FieldIndexByName(name)
 				if index < 0 {
 					return fatal("missing geometry column %q", name)
 				}
 
-				repetitionType := sc.Root().Field(index).RepetitionType()
+				repetitionType := root.Field(index).RepetitionType()
 				if repetitionType == parquet.Repetitions.Repeated {
 					return fmt.Errorf("column %q must not be repeated", name)
 				}

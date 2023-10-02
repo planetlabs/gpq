@@ -32,6 +32,7 @@ func getMetadata(fileReader *file.Reader, convertOptions *ConvertOptions) *Metad
 			primaryColumn = convertOptions.InputPrimaryColumn
 		}
 		metadata = &Metadata{
+			Version:       Version,
 			PrimaryColumn: primaryColumn,
 			Columns: map[string]*GeometryColumn{
 				primaryColumn: getDefaultGeometryColumn(),
