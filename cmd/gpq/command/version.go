@@ -16,20 +16,20 @@ package command
 
 import "fmt"
 
-var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
-)
-
 type VersionCmd struct {
 	Detail bool `help:"Include detail about the commit and build date."`
 }
 
-func (c *VersionCmd) Run() error {
-	output := version
+type VersionInfo struct {
+	Version string
+	Commit  string
+	Date    string
+}
+
+func (c *VersionCmd) Run(info *VersionInfo) error {
+	output := info.Version
 	if c.Detail {
-		output = fmt.Sprintf("%s (%s %s)", output, commit, date)
+		output = fmt.Sprintf("%s (%s %s)", output, info.Commit, info.Date)
 	}
 	fmt.Println(output)
 	return nil

@@ -60,4 +60,4 @@ brews:
     description: "Utility for working with GeoParquet."
     license: "Apache-2.0"
     test: |
-      system "#{bin}/xyz2ogc version"
+      system "#{bin}/gpq version"
