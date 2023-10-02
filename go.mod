@@ -48,3 +48,6 @@ require (
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+// https://github.com/zeroshade/arrow/tree/arm64-assembly-funtimes
+replace github.com/apache/arrow/go/v14 => github.com/zeroshade/arrow/go/v14 v14.0.0-20230926190308-c9693c5f9b33
