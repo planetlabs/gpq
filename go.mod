@@ -50,4 +50,4 @@ require (
 )
 
 // https://github.com/zeroshade/arrow/tree/arm64-assembly-funtimes
-replace github.com/apache/arrow/go/v14 => github.com/zeroshade/arrow/go/v14 v14.0.0-20230926190308-c9693c5f9b33
+replace github.com/apache/arrow/go/v14 => github.com/zeroshade/arrow/go/v14 v14.0.0-20231002231208-9d4c29b390a2
