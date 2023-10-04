@@ -97,7 +97,11 @@ func (c *DescribeCmd) Run() error {
 	metadata, geoErr := geoparquet.GetMetadata(fileMetadata.KeyValueMetadata())
 	if geoErr != nil {
 		if !errors.Is(geoErr, geoparquet.ErrNoMetadata) {
-			message := fmt.Sprintf("Metadata parsing failed, try running describe with the --metadata-only flag.  Error message: %s", geoErr.Error())
+			message := fmt.Sprintf(
+				"Metadata parsing failed."+
+					" Run describe with the --metadata-only flag to see the geo metadata value."+
+					" Run validate for more detail on validation issues."+
+					" (Error message: %s)", geoErr.Error())
 			info.Issues = append(info.Issues, message)
 		}
 	} else {
