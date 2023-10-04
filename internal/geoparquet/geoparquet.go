@@ -2,6 +2,7 @@ package geoparquet
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -62,9 +63,20 @@ func FromParquet(input parquet.ReaderAtSeeker, output io.Writer, convertOptions 
 	datasetInfo := geo.NewDatasetStats(true)
 	transformSchema := func(fileReader *file.Reader) (*schema.Schema, error) {
 		inputSchema := fileReader.MetaData().Schema
+		inputRoot := inputSchema.Root()
 		metadata := getMetadata(fileReader, convertOptions)
-		for fieldNum := 0; fieldNum < inputSchema.Root().NumFields(); fieldNum += 1 {
-			field := inputSchema.Root().Field(fieldNum)
+		for geomColName := range metadata.Columns {
+			if inputRoot.FieldIndexByName(geomColName) < 0 {
+				message := fmt.Sprintf(
+					"expected a geometry column named %q,"+
+						" use the --input-primary-column to supply a different primary geometry",
+					geomColName,
+				)
+				return nil, errors.New(message)
+			}
+		}
+		for fieldNum := 0; fieldNum < inputRoot.NumFields(); fieldNum += 1 {
+			field := inputRoot.Field(fieldNum)
 			name := field.Name()
 			if _, ok := metadata.Columns[name]; !ok {
 				continue
@@ -78,9 +90,7 @@ func FromParquet(input parquet.ReaderAtSeeker, output io.Writer, convertOptions 
 			return inputSchema, nil
 		}
 
-		inputRoot := inputSchema.Root()
 		numFields := inputRoot.NumFields()
-
 		fields := make([]schema.Node, numFields)
 		for fieldNum := 0; fieldNum < numFields; fieldNum += 1 {
 			inputField := inputRoot.Field(fieldNum)

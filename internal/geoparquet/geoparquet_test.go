@@ -192,6 +192,26 @@ func TestFromParquetWithoutMetadata(t *testing.T) {
 	assert.Equal(t, int64(1), reader.NumRows())
 }
 
+func TestFromParquetWithoutDefaultGeometryColumn(t *testing.T) {
+	type Row struct {
+		Name string `parquet:"name=name, logical=String" json:"name"`
+		Geom []byte `parquet:"name=geom" json:"geom"`
+	}
+
+	rows := []*Row{
+		{
+			Name: "test-point",
+			Geom: toWKB(t, orb.Point{1, 2}),
+		},
+	}
+
+	input := test.ParquetFromStructs(t, rows)
+
+	output := &bytes.Buffer{}
+	convertErr := geoparquet.FromParquet(input, output, nil)
+	require.ErrorContains(t, convertErr, "expected a geometry column named \"geometry\"")
+}
+
 func TestMetadataClone(t *testing.T) {
 	metadata := geoparquet.DefaultMetadata()
 	clone := metadata.Clone()
