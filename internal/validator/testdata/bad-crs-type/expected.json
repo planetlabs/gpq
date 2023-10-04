@@ -43,63 +43,63 @@
     {
       "title": "optional \"crs\" must be null or a PROJJSON object",
       "run": true,
-      "passed": true
+      "passed": false,
+      "message": "expected \"crs\" for column \"geometry\" to be an object, got a string: \"bogus\""
     },
     {
       "title": "optional \"orientation\" must be a valid string",
-      "run": true,
-      "passed": true
+      "passed": false,
+      "run": false
     },
     {
       "title": "optional \"edges\" must be a valid string",
-      "run": true,
-      "passed": true
+      "passed": false,
+      "run": false
     },
     {
       "title": "optional \"bbox\" must be an array of 4 or 6 numbers",
-      "run": true,
-      "passed": true
+      "passed": false,
+      "run": false
     },
     {
       "title": "optional \"epoch\" must be a number",
-      "run": true,
       "passed": false,
-      "message": "expected \"epoch\" for column \"geometry\" to be a number, got a string: \"bogus\""
+      "run": false
     },
     {
       "title": "geometry columns must not be grouped",
-      "run": false,
-      "passed": false
+      "passed": false,
+      "run": false
     },
     {
       "title": "geometry columns must be stored using the BYTE_ARRAY parquet type",
-      "run": false,
-      "passed": false
+      "passed": false,
+      "run": false
     },
     {
       "title": "geometry columns must be required or optional, not repeated",
-      "run": false,
-      "passed": false
+      "passed": false,
+      "run": false
     },
     {
       "title": "all geometry values match the \"encoding\" metadata",
-      "run": false,
-      "passed": false
+      "passed": false,
+      "run": false
     },
     {
       "title": "all geometry types must be included in the \"geometry_types\" metadata (if not empty)",
-      "run": false,
-      "passed": false
+      "passed": false,
+      "run": false
     },
     {
       "title": "all polygon geometries must follow the \"orientation\" metadata (if present)",
-      "run": false,
-      "passed": false
+      "passed": false,
+      "run": false
     },
     {
       "title": "all geometries must fall within the \"bbox\" metadata (if present)",
-      "run": false,
-      "passed": false
+      "passed": false,
+      "run": false
     }
   ],
   "metadataOnly": false

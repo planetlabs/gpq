@@ -119,6 +119,22 @@ func asJSON(value any) string {
 	return string(data)
 }
 
+func jsonType(value any) string {
+	switch value.(type) {
+	case bool:
+		return "boolean"
+	case float64:
+		return "number"
+	case string:
+		return "string"
+	case map[string]any:
+		return "object"
+	case []any:
+		return "list"
+	}
+	return fmt.Sprintf("%T", value)
+}
+
 func RequiredGeoKey() Rule {
 	return &GenericRule[*file.Reader]{
 		title: fmt.Sprintf("file must include a %q metadata key", geoparquet.MetadataKey),
@@ -296,7 +312,7 @@ func OptionalCRS() Rule {
 				}
 				crs, ok := meta["crs"].(map[string]any)
 				if !ok {
-					return fmt.Errorf(`expected "crs" for column %q to be an object, got %s`, name, asJSON(meta["crs"]))
+					return fatal(`expected "crs" for column %q to be an object, got a %s: %s`, name, jsonType(meta["crs"]), asJSON(meta["crs"]))
 				}
 				schemaUrl, ok := crs["$schema"].(string)
 				if !ok {
@@ -333,7 +349,7 @@ func OptionalOrientation() Rule {
 				}
 				orientation, ok := meta["orientation"].(string)
 				if !ok {
-					return fmt.Errorf(`expected "orientation" for column %q to be a string, got %s`, name, asJSON(meta["orientation"]))
+					return fatal(`expected "orientation" for column %q to be a string, got a %s: %s`, name, jsonType(meta["orientation"]), asJSON(meta["orientation"]))
 				}
 				if orientation != geoparquet.OrientationCounterClockwise {
 					return fmt.Errorf(`unsupported orientation %q for column %q, expected %q`, orientation, name, geoparquet.OrientationCounterClockwise)
@@ -355,7 +371,7 @@ func OptionalEdges() Rule {
 				}
 				edges, ok := meta["edges"].(string)
 				if !ok {
-					return fmt.Errorf(`expected "edges" for column %q to be a string, got %s`, name, asJSON(meta["edges"]))
+					return fatal(`expected "edges" for column %q to be a string, got a %s: %s`, name, jsonType(meta["edges"]), asJSON(meta["edges"]))
 				}
 				if edges != geoparquet.EdgesPlanar && edges != geoparquet.EdgesSpherical {
 					return fmt.Errorf(`unsupported edges %q for column %q, expected %q or %q`, edges, name, geoparquet.EdgesPlanar, geoparquet.EdgesSpherical)
@@ -377,7 +393,7 @@ func OptionalBbox() Rule {
 				}
 				bbox, ok := meta["bbox"].([]any)
 				if !ok {
-					return fmt.Errorf(`expected "bbox" for column %q to be a list, got %s`, name, asJSON(meta["bbox"]))
+					return fatal(`expected "bbox" for column %q to be a list, got a %s: %s`, name, jsonType(meta["bbox"]), asJSON(meta["bbox"]))
 				}
 				if len(bbox) != 4 && len(bbox) != 6 {
 					return fmt.Errorf(`expected "bbox" for column %q to be a list of 4 or 6 numbers, got %s`, name, asJSON(bbox))
@@ -405,7 +421,7 @@ func OptionalEpoch() Rule {
 				}
 				_, ok = meta["epoch"].(float64)
 				if !ok {
-					return fatal(`expected "epoch" for column %q to be a number, got %s`, name, asJSON(meta["epoch"]))
+					return fatal(`expected "epoch" for column %q to be a number, got a %s: %s`, name, jsonType(meta["epoch"]), asJSON(meta["epoch"]))
 				}
 			}
 			return nil

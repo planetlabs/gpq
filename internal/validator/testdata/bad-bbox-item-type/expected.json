@@ -58,13 +58,13 @@
     {
       "title": "optional \"bbox\" must be an array of 4 or 6 numbers",
       "run": true,
-      "passed": true
+      "passed": false,
+      "message": "expected \"bbox\" for column \"geometry\" to be a list of numbers, got [\"not\",\"a\",\"bounding\",\"box\"]"
     },
     {
       "title": "optional \"epoch\" must be a number",
-      "run": true,
-      "passed": false,
-      "message": "expected \"epoch\" for column \"geometry\" to be a number, got a string: \"bogus\""
+      "run": false,
+      "passed": false
     },
     {
       "title": "geometry columns must not be grouped",
