@@ -85,7 +85,7 @@ func TestTransformByColumn(t *testing.T) {
 
 	for i, c := range cases {
 		t.Run(fmt.Sprintf("%s (case %d)", c.name, i), func(t *testing.T) {
-			input := test.ParquetFromJSON(t, c.data, nil)
+			input := bytes.NewReader(test.ParquetFromJSON(t, c.data, nil))
 			output := &bytes.Buffer{}
 			config := c.config
 			if config == nil {
@@ -174,7 +174,7 @@ func TestTransformByRowGroupLength(t *testing.T) {
 	for i, c := range cases {
 		t.Run(fmt.Sprintf("%s (case %d)", c.name, i), func(t *testing.T) {
 			writerProperties := parquet.NewWriterProperties(parquet.WithMaxRowGroupLength(int64(c.inputRowGroupLength)))
-			input := test.ParquetFromJSON(t, string(inputData), writerProperties)
+			input := bytes.NewReader(test.ParquetFromJSON(t, string(inputData), writerProperties))
 			output := &bytes.Buffer{}
 			config := c.config
 			if config == nil {
@@ -293,7 +293,7 @@ func TestTransformColumn(t *testing.T) {
 		return arrow.NewChunked(builder.Type(), transformed), nil
 	}
 
-	input := test.ParquetFromJSON(t, data, nil)
+	input := bytes.NewReader(test.ParquetFromJSON(t, data, nil))
 	output := &bytes.Buffer{}
 	config := &pqutil.TransformConfig{
 		Reader:          input,
