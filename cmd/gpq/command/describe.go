@@ -96,8 +96,21 @@ func (c *DescribeCmd) Run() error {
 
 	metadata, geoErr := geoparquet.GetMetadata(fileMetadata.KeyValueMetadata())
 	if geoErr != nil {
-		if !errors.Is(geoErr, geoparquet.ErrNoMetadata) {
-			message := fmt.Sprintf("Metadata parsing failed, try running describe with the --metadata-only flag.  Error message: %s", geoErr.Error())
+		if errors.Is(geoErr, geoparquet.ErrNoMetadata) {
+			message := fmt.Sprintf(
+				"Not a valid GeoParquet file (missing the %q metadata key)."+
+					" Run convert to try to convert it to GeoParquet.",
+				geoparquet.MetadataKey,
+			)
+			info.Issues = append(info.Issues, message)
+		} else {
+			message := fmt.Sprintf(
+				"Not a valid GeoParquet file (invalid %q metadata)."+
+					" Run describe with the --metadata-only flag to see the %q metadata value."+
+					" Run validate for more detail on validation issues.",
+				geoparquet.MetadataKey,
+				geoparquet.MetadataKey,
+			)
 			info.Issues = append(info.Issues, message)
 		}
 	} else {
@@ -127,12 +140,16 @@ func (c *DescribeCmd) formatText(info *DescribeInfo) error {
 	if metadata != nil {
 		header = append(header, ColEncoding, ColGeometryTypes, ColBounds, ColDetail)
 		columnConfigs = append(columnConfigs, table.ColumnConfig{
+			Name:             ColEncoding,
+			WidthMax:         40,
+			WidthMaxEnforcer: text.WrapSoft,
+		}, table.ColumnConfig{
 			Name:             ColGeometryTypes,
-			WidthMax:         50,
+			WidthMax:         40,
 			WidthMaxEnforcer: text.WrapSoft,
 		}, table.ColumnConfig{
 			Name:             ColBounds,
-			WidthMax:         50,
+			WidthMax:         40,
 			WidthMaxEnforcer: text.WrapSoft,
 		})
 	}

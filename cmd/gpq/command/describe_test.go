@@ -55,6 +55,8 @@ func (s *Suite) TestDescribe() {
 	s.Equal("string", info.Schema.Fields[5].Annotation)
 	s.Equal("gzip", info.Schema.Fields[5].Compression)
 	s.True(info.Schema.Fields[5].Optional)
+
+	s.Len(info.Issues, 0)
 }
 
 func (s *Suite) TestDescribeFromStdin() {
@@ -98,4 +100,45 @@ func (s *Suite) TestDescribeFromStdin() {
 	s.Equal("string", info.Schema.Fields[1].Annotation)
 	s.Equal("zstd", info.Schema.Fields[1].Compression)
 	s.True(info.Schema.Fields[1].Optional)
+
+	s.Len(info.Issues, 0)
+}
+
+func (s *Suite) TestDescribeMissingMetadata() {
+	s.writeStdin(test.ParquetFromJSON(s.T(), `[
+		{
+			"food": "burrito",
+			"good": true
+		},
+		{
+			"food": "onion",
+			"good": false
+		}
+	]`, nil))
+
+	cmd := &command.DescribeCmd{
+		Format: "json",
+	}
+
+	s.Require().NoError(cmd.Run())
+
+	output := s.readStdout()
+	info := &command.DescribeInfo{}
+	err := json.Unmarshal(output, info)
+	s.Require().NoError(err)
+
+	s.Equal(int64(2), info.NumRows)
+	s.Require().Len(info.Schema.Fields, 2)
+
+	s.Equal("food", info.Schema.Fields[0].Name)
+	s.Equal("binary", info.Schema.Fields[0].Type)
+	s.Equal("string", info.Schema.Fields[0].Annotation)
+	s.True(info.Schema.Fields[0].Optional)
+
+	s.Equal("good", info.Schema.Fields[1].Name)
+	s.Equal("boolean", info.Schema.Fields[1].Type)
+	s.True(info.Schema.Fields[1].Optional)
+
+	s.Require().Len(info.Issues, 1)
+	s.Contains(info.Issues[0], "Not a valid GeoParquet file (missing the \"geo\" metadata key).")
 }

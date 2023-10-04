@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func ParquetFromJSON(t *testing.T, data string, writerProperties *parquet.WriterProperties) parquet.ReaderAtSeeker {
+func ParquetFromJSON(t *testing.T, data string, writerProperties *parquet.WriterProperties) []byte {
 	if writerProperties == nil {
 		writerProperties = parquet.NewWriterProperties()
 	}
@@ -50,7 +50,7 @@ func ParquetFromJSON(t *testing.T, data string, writerProperties *parquet.Writer
 	require.NoError(t, writer.WriteBuffered(rec))
 	require.NoError(t, writer.Close())
 
-	return bytes.NewReader(output.Bytes())
+	return output.Bytes()
 }
 
 func ParquetToJSON(t *testing.T, input parquet.ReaderAtSeeker) string {
