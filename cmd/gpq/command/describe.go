@@ -34,9 +34,10 @@ import (
 )
 
 type DescribeCmd struct {
-	Input    string `arg:"" optional:"" name:"input" help:"Path to a GeoParquet file.  If not provided, input is read from stdin." type:"existingfile"`
-	Format   string `help:"Report format.  Possible values: ${enum}." enum:"text, json" default:"text"`
-	Unpretty bool   `help:"No newlines or indentation in the JSON output."`
+	Input        string `arg:"" optional:"" name:"input" help:"Path to a GeoParquet file.  If not provided, input is read from stdin." type:"existingfile"`
+	Format       string `help:"Report format.  Possible values: ${enum}." enum:"text, json" default:"text"`
+	MetadataOnly bool   `help:"Print the unformatted geo metadata only (other arguments will be ignored)."`
+	Unpretty     bool   `help:"No newlines or indentation in the JSON output."`
 }
 
 const (
@@ -56,13 +57,13 @@ func (c *DescribeCmd) Run() error {
 	if c.Input == "" {
 		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			return fmt.Errorf("trouble reading from stdin: %w", err)
+			return NewCommandError("trouble reading from stdin: %w", err)
 		}
 		input = bytes.NewReader(data)
 	} else {
 		i, readErr := os.Open(c.Input)
 		if readErr != nil {
-			return fmt.Errorf("failed to read from %q: %w", c.Input, readErr)
+			return NewCommandError("failed to read from %q: %w", c.Input, readErr)
 		}
 		defer i.Close()
 		input = i
@@ -72,25 +73,50 @@ func (c *DescribeCmd) Run() error {
 	if fileErr != nil {
 		return fmt.Errorf("failed to read %q as parquet: %w", c.Input, fileErr)
 	}
+	defer fileReader.Close()
+
+	if c.MetadataOnly {
+		value, err := geoparquet.GetMetadataValue(fileReader.MetaData().KeyValueMetadata())
+		if err != nil {
+			if errors.Is(err, geoparquet.ErrNoMetadata) {
+				return NewCommandError("missing %q metadata key", geoparquet.MetadataKey)
+			}
+			return err
+		}
+		fmt.Println(value)
+		return nil
+	}
 
 	fileMetadata := fileReader.MetaData()
+
+	info := &DescribeInfo{
+		Schema:  buildSchema(fileReader, "", fileMetadata.Schema.Root()),
+		NumRows: fileMetadata.NumRows,
+	}
+
 	metadata, geoErr := geoparquet.GetMetadata(fileMetadata.KeyValueMetadata())
 	if geoErr != nil {
 		if !errors.Is(geoErr, geoparquet.ErrNoMetadata) {
-			return geoErr
+			message := fmt.Sprintf("Metadata parsing failed, try running describe with the --metadata-only flag.  Error message: %s", geoErr.Error())
+			info.Issues = append(info.Issues, message)
 		}
-	}
-
-	info := &DescribeInfo{
-		Schema:   buildSchema(fileReader, "", fileMetadata.Schema.Root()),
-		Metadata: metadata,
-		NumRows:  fileMetadata.NumRows,
+	} else {
+		info.Metadata = metadata
 	}
 
 	if c.Format == "json" {
-		return c.formatJSON(info)
+		err := c.formatJSON(info)
+		if err != nil {
+			return NewCommandError("failed to format report as json: %w", err)
+		}
+		return nil
 	}
-	return c.formatText(info)
+
+	if err := c.formatText(info); err != nil {
+		return NewCommandError("failed to format report: %w", err)
+	}
+
+	return nil
 }
 
 func (c *DescribeCmd) formatText(info *DescribeInfo) error {
@@ -168,18 +194,26 @@ func (c *DescribeCmd) formatText(info *DescribeInfo) error {
 		tbl.AppendRow(row)
 	}
 
-	tbl.AppendFooter(makeFooter("Rows", info.NumRows, header), table.RowConfig{AutoMerge: true})
+	footerConfig := table.RowConfig{AutoMerge: true, AutoMergeAlign: text.AlignLeft}
+	tbl.AppendFooter(makeFooter("Rows", info.NumRows, header), footerConfig)
 	if metadata != nil {
 		version := metadata.Version
 		if version == "" {
 			version = "missing"
 		}
-		tbl.AppendFooter(makeFooter("Version", version, header), table.RowConfig{AutoMerge: true, AutoMergeAlign: text.AlignLeft})
+		tbl.AppendFooter(makeFooter("GeoParquet Version", version, header), footerConfig)
 	}
 
-	tbl.SetStyle(table.StyleRounded)
+	style := table.StyleRounded
+	style.Format.Footer = text.FormatDefault
+
+	tbl.SetStyle(style)
 	tbl.SetOutputMirror(out)
 	tbl.Render()
+
+	for _, issue := range info.Issues {
+		fmt.Printf(" ⚠️  %s\n", issue)
+	}
 
 	return nil
 }
@@ -187,7 +221,7 @@ func (c *DescribeCmd) formatText(info *DescribeInfo) error {
 func makeFooter(key string, value any, header table.Row) table.Row {
 	row := table.Row{key, value}
 	for i := len(row); i < len(header); i += 1 {
-		row = append(row, "")
+		row = append(row, value)
 	}
 	return row
 }
@@ -209,6 +243,7 @@ type DescribeInfo struct {
 	Schema   *DescribeSchema      `json:"schema"`
 	Metadata *geoparquet.Metadata `json:"metadata"`
 	NumRows  int64                `json:"rows"`
+	Issues   []string             `json:"issues"`
 }
 
 type DescribeSchema struct {

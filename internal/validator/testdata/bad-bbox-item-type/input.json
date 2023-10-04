@@ -6,7 +6,7 @@
       "geometry": {
         "encoding": "WKB",
         "geometry_types": [],
-        "bbox": "bogus"
+        "bbox": ["not", "a", "bounding", "box"]
       }
     }
   },

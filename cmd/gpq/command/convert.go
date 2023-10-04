@@ -16,8 +16,6 @@ package command
 
 import (
 	"bytes"
-	"errors"
-	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -99,36 +97,36 @@ func (c *ConvertCmd) Run() error {
 	outputFormat := parseFormatType(c.To)
 	if outputFormat == AutoType {
 		if outputSource == "" {
-			return fmt.Errorf("when writing to stdout, the --to option must be provided to determine the output format")
+			return NewCommandError("when writing to stdout, the --to option must be provided to determine the output format")
 		}
 		outputFormat = getFormatType(outputSource)
 	}
 	if outputFormat == UnknownType {
-		return fmt.Errorf("could not determine output format for %s", outputSource)
+		return NewCommandError("could not determine output format for %s", outputSource)
 	}
 
 	inputFormat := parseFormatType(c.From)
 	if inputFormat == AutoType {
 		if inputSource == "" {
-			return fmt.Errorf("when reading from stdin, the --from option must be provided to determine the input format")
+			return NewCommandError("when reading from stdin, the --from option must be provided to determine the input format")
 		}
 		inputFormat = getFormatType(inputSource)
 	}
 	if inputFormat == UnknownType {
-		return fmt.Errorf("could not determine input format for %s", inputSource)
+		return NewCommandError("could not determine input format for %s", inputSource)
 	}
 
 	var input ReaderAtSeeker
 	if inputSource == "" {
 		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			return fmt.Errorf("trouble reading from stdin: %w", err)
+			return NewCommandError("trouble reading from stdin: %w", err)
 		}
 		input = bytes.NewReader(data)
 	} else {
 		i, readErr := os.Open(inputSource)
 		if readErr != nil {
-			return fmt.Errorf("failed to read from %q: %w", inputSource, readErr)
+			return NewCommandError("failed to read from %q: %w", inputSource, readErr)
 		}
 		defer i.Close()
 		input = i
@@ -140,7 +138,7 @@ func (c *ConvertCmd) Run() error {
 	} else {
 		o, createErr := os.Create(outputSource)
 		if createErr != nil {
-			return fmt.Errorf("failed to open %q for writing: %w", outputSource, createErr)
+			return NewCommandError("failed to open %q for writing: %w", outputSource, createErr)
 		}
 		defer o.Close()
 		output = o
@@ -148,7 +146,7 @@ func (c *ConvertCmd) Run() error {
 
 	if inputFormat == GeoJSONType {
 		if outputFormat != ParquetType && outputFormat != GeoParquetType {
-			return errors.New("GeoJSON input can only be converted to GeoParquet")
+			return NewCommandError("GeoJSON input can only be converted to GeoParquet")
 		}
 		convertOptions := &geojson.ConvertOptions{
 			MinFeatures:    c.Min,
@@ -156,11 +154,17 @@ func (c *ConvertCmd) Run() error {
 			Compression:    c.Compression,
 			RowGroupLength: c.RowGroupLength,
 		}
-		return geojson.ToParquet(input, output, convertOptions)
+		if err := geojson.ToParquet(input, output, convertOptions); err != nil {
+			return NewCommandError("%w", err)
+		}
+		return nil
 	}
 
 	if outputFormat == GeoJSONType {
-		return geojson.FromParquet(input, output)
+		if err := geojson.FromParquet(input, output); err != nil {
+			return NewCommandError("%w", err)
+		}
+		return nil
 	}
 
 	convertOptions := &geoparquet.ConvertOptions{
@@ -169,5 +173,8 @@ func (c *ConvertCmd) Run() error {
 		RowGroupLength:     c.RowGroupLength,
 	}
 
-	return geoparquet.FromParquet(input, output, convertOptions)
+	if err := geoparquet.FromParquet(input, output, convertOptions); err != nil {
+		return NewCommandError("%w", err)
+	}
+	return nil
 }

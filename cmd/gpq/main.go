@@ -15,6 +15,8 @@
 package main
 
 import (
+	"errors"
+
 	"github.com/alecthomas/kong"
 	"github.com/planetlabs/gpq/cmd/gpq/command"
 )
@@ -28,5 +30,12 @@ var (
 func main() {
 	ctx := kong.Parse(&command.CLI)
 	err := ctx.Run(ctx, &command.VersionInfo{Version: version, Commit: commit, Date: date})
+	if err == nil {
+		return
+	}
+	var commandError *command.CommandError
+	if errors.As(err, &commandError) {
+		err = commandError
+	}
 	ctx.FatalIfErrorf(err)
 }

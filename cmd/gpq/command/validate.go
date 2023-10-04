@@ -40,18 +40,18 @@ func (c *ValidateCmd) Run(ctx *kong.Context) error {
 	var input ReaderAtSeeker
 	if c.Input == "" {
 		if !hasStdin() {
-			return fmt.Errorf("input argument must be provided if there is no stdin data")
+			return NewCommandError("input argument must be provided if there is no stdin data")
 		}
 		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			return fmt.Errorf("trouble reading from stdin: %w", err)
+			return NewCommandError("trouble reading from stdin: %w", err)
 		}
 		input = bytes.NewReader(data)
 		inputName = "<stdin>"
 	} else {
 		i, readErr := os.Open(c.Input)
 		if readErr != nil {
-			return fmt.Errorf("failed to read from %q: %w", c.Input, readErr)
+			return NewCommandError("failed to read from %q: %w", c.Input, readErr)
 		}
 		defer i.Close()
 		input = i
@@ -60,7 +60,7 @@ func (c *ValidateCmd) Run(ctx *kong.Context) error {
 	v := validator.New(c.MetadataOnly)
 	report, err := v.Validate(context.Background(), input, inputName)
 	if err != nil {
-		return err
+		return NewCommandError("validation failed: %w", err)
 	}
 
 	valid := true
@@ -73,11 +73,11 @@ func (c *ValidateCmd) Run(ctx *kong.Context) error {
 
 	if c.Format == "json" {
 		if err := c.formatJSON(report); err != nil {
-			return err
+			return NewCommandError("unable to format report as json: %w", err)
 		}
 	} else {
 		if err := c.formatText(report); err != nil {
-			return err
+			return NewCommandError("unable to format report: %w", err)
 		}
 	}
 
