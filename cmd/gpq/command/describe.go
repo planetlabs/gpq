@@ -90,8 +90,9 @@ func (c *DescribeCmd) Run() error {
 	fileMetadata := fileReader.MetaData()
 
 	info := &DescribeInfo{
-		Schema:  buildSchema(fileReader, "", fileMetadata.Schema.Root()),
-		NumRows: fileMetadata.NumRows,
+		Schema:       buildSchema(fileReader, "", fileMetadata.Schema.Root()),
+		NumRows:      fileMetadata.NumRows,
+		NumRowGroups: int64(len(fileMetadata.RowGroups)),
 	}
 
 	metadata, geoErr := geoparquet.GetMetadata(fileMetadata.KeyValueMetadata())
@@ -213,6 +214,7 @@ func (c *DescribeCmd) formatText(info *DescribeInfo) error {
 
 	footerConfig := table.RowConfig{AutoMerge: true, AutoMergeAlign: text.AlignLeft}
 	tbl.AppendFooter(makeFooter("Rows", info.NumRows, header), footerConfig)
+	tbl.AppendFooter(makeFooter("Row Groups", info.NumRowGroups, header), footerConfig)
 	if metadata != nil {
 		version := metadata.Version
 		if version == "" {
@@ -257,10 +259,11 @@ func (c *DescribeCmd) formatJSON(info *DescribeInfo) error {
 }
 
 type DescribeInfo struct {
-	Schema   *DescribeSchema      `json:"schema"`
-	Metadata *geoparquet.Metadata `json:"metadata"`
-	NumRows  int64                `json:"rows"`
-	Issues   []string             `json:"issues"`
+	Schema       *DescribeSchema      `json:"schema"`
+	Metadata     *geoparquet.Metadata `json:"metadata"`
+	NumRows      int64                `json:"rows"`
+	NumRowGroups int64                `json:"groups"`
+	Issues       []string             `json:"issues"`
 }
 
 type DescribeSchema struct {

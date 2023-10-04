@@ -3,6 +3,7 @@ package command_test
 import (
 	"encoding/json"
 
+	"github.com/apache/arrow/go/v14/parquet"
 	"github.com/planetlabs/gpq/cmd/gpq/command"
 	"github.com/planetlabs/gpq/internal/test"
 )
@@ -21,6 +22,7 @@ func (s *Suite) TestDescribe() {
 	s.Require().NoError(err)
 
 	s.Equal(int64(5), info.NumRows)
+	s.Equal(int64(1), info.NumRowGroups)
 	s.Require().Len(info.Schema.Fields, 6)
 
 	s.Equal("geometry", info.Schema.Fields[0].Name)
@@ -59,6 +61,33 @@ func (s *Suite) TestDescribe() {
 	s.Len(info.Issues, 0)
 }
 
+func (s *Suite) TestDescribeNumRowGroups() {
+	s.writeStdin(test.ParquetFromJSON(s.T(), `[
+		{"num": 0},
+		{"num": 1},
+		{"num": 2},
+		{"num": 3},
+		{"num": 4},
+		{"num": 5},
+		{"num": 6},
+		{"num": 7}
+	]`, parquet.NewWriterProperties(parquet.WithMaxRowGroupLength(2))))
+
+	cmd := &command.DescribeCmd{
+		Format: "json",
+	}
+
+	s.Require().NoError(cmd.Run())
+
+	output := s.readStdout()
+	info := &command.DescribeInfo{}
+	err := json.Unmarshal(output, info)
+	s.Require().NoError(err)
+
+	s.Equal(int64(8), info.NumRows)
+	s.Equal(int64(4), info.NumRowGroups)
+}
+
 func (s *Suite) TestDescribeFromStdin() {
 	s.writeStdin(test.GeoParquetFromJSON(s.T(), `{
 		"type": "FeatureCollection",
@@ -88,6 +117,7 @@ func (s *Suite) TestDescribeFromStdin() {
 	s.Require().NoError(err)
 
 	s.Equal(int64(1), info.NumRows)
+	s.Equal(int64(1), info.NumRowGroups)
 	s.Require().Len(info.Schema.Fields, 2)
 
 	s.Equal("geometry", info.Schema.Fields[0].Name)
