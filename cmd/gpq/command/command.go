@@ -1,8 +1,13 @@
 package command
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"os"
+	"strings"
+
+	"github.com/planetlabs/gpq/internal/storage"
 )
 
 var CLI struct {
@@ -10,12 +15,6 @@ var CLI struct {
 	Validate ValidateCmd `cmd:"" help:"Validate a GeoParquet file."`
 	Describe DescribeCmd `cmd:"" help:"Describe a GeoParquet file."`
 	Version  VersionCmd  `cmd:"" help:"Print the version of this program."`
-}
-
-type ReaderAtSeeker interface {
-	io.Reader
-	io.ReaderAt
-	io.Seeker
 }
 
 type CommandError struct {
@@ -32,4 +31,20 @@ func (e *CommandError) Error() string {
 
 func (e *CommandError) Unwrap() error {
 	return e.err
+}
+
+func readerFromInput(input string) (storage.ReaderAtSeeker, error) {
+	if input == "" {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return nil, fmt.Errorf("trouble reading from stdin: %w", err)
+		}
+		return bytes.NewReader(data), nil
+	}
+
+	if strings.HasPrefix(input, "http://") || strings.HasPrefix(input, "https://") {
+		return storage.NewHttpReader(input)
+	}
+
+	return os.Open(input)
 }
