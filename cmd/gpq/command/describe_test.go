@@ -172,3 +172,28 @@ func (s *Suite) TestDescribeMissingMetadata() {
 	s.Require().Len(info.Issues, 1)
 	s.Contains(info.Issues[0], "Not a valid GeoParquet file (missing the \"geo\" metadata key).")
 }
+
+func (s *Suite) TestDescribeFromUrl() {
+	cmd := &command.DescribeCmd{
+		Format: "json",
+		Input:  s.server.URL + "/testdata/cases/example-v1.0.0.parquet",
+	}
+
+	s.Require().NoError(cmd.Run())
+
+	output := s.readStdout()
+	info := &command.DescribeInfo{}
+	err := json.Unmarshal(output, info)
+	s.Require().NoError(err)
+
+	s.Equal(int64(5), info.NumRows)
+	s.Equal(int64(1), info.NumRowGroups)
+	s.Require().Len(info.Schema.Fields, 6)
+
+	s.Equal("geometry", info.Schema.Fields[0].Name)
+	s.Equal("binary", info.Schema.Fields[0].Type)
+	s.Equal("gzip", info.Schema.Fields[0].Compression)
+	s.True(info.Schema.Fields[0].Optional)
+
+	s.Len(info.Issues, 0)
+}

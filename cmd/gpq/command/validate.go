@@ -15,11 +15,9 @@
 package command
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
@@ -29,34 +27,22 @@ import (
 )
 
 type ValidateCmd struct {
-	Input        string `arg:"" optional:"" name:"input" help:"Path to a GeoParquet file.  If not provided, input is read from stdin." type:"existingfile"`
+	Input        string `arg:"" optional:"" name:"input" help:"Path or URL for a GeoParquet file.  If not provided, input is read from stdin."`
 	MetadataOnly bool   `help:"Only run rules that apply to file metadata and schema (no data will be scanned)."`
 	Unpretty     bool   `help:"No colors in text output, no newlines and indentation in JSON output."`
 	Format       string `help:"Report format.  Possible values: ${enum}." enum:"text, json" default:"text"`
 }
 
 func (c *ValidateCmd) Run(ctx *kong.Context) error {
-	inputName := c.Input
-	var input ReaderAtSeeker
-	if c.Input == "" {
-		if !hasStdin() {
-			return NewCommandError("input argument must be provided if there is no stdin data")
-		}
-		data, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return NewCommandError("trouble reading from stdin: %w", err)
-		}
-		input = bytes.NewReader(data)
-		inputName = "<stdin>"
-	} else {
-		i, readErr := os.Open(c.Input)
-		if readErr != nil {
-			return NewCommandError("failed to read from %q: %w", c.Input, readErr)
-		}
-		defer i.Close()
-		input = i
+	input, inputErr := readerFromInput(c.Input)
+	if inputErr != nil {
+		return NewCommandError("trouble getting a reader from %q: %w", c.Input, inputErr)
 	}
 
+	inputName := c.Input
+	if inputName == "" {
+		inputName = "<stdin>"
+	}
 	v := validator.New(c.MetadataOnly)
 	report, err := v.Validate(context.Background(), input, inputName)
 	if err != nil {

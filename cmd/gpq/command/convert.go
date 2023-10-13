@@ -15,8 +15,7 @@
 package command
 
 import (
-	"bytes"
-	"io"
+	"net/url"
 	"os"
 	"strings"
 
@@ -25,7 +24,7 @@ import (
 )
 
 type ConvertCmd struct {
-	Input              string `arg:"" optional:"" name:"input" help:"Input file.  If not provided, input is read from stdin." type:"path"`
+	Input              string `arg:"" optional:"" name:"input" help:"Input file path or URL.  If not provided, input is read from stdin."`
 	From               string `help:"Input file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet, parquet" default:"auto"`
 	Output             string `arg:"" optional:"" name:"output" help:"Output file.  If not provided, output is written to stdout." type:"path"`
 	To                 string `help:"Output file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet" default:"auto"`
@@ -64,14 +63,17 @@ func parseFormatType(format string) FormatType {
 	return ft
 }
 
-func getFormatType(filename string) FormatType {
-	if strings.HasSuffix(filename, ".json") || strings.HasSuffix(filename, ".geojson") {
+func getFormatType(resource string) FormatType {
+	if u, err := url.Parse(resource); err == nil {
+		resource = u.Path
+	}
+	if strings.HasSuffix(resource, ".json") || strings.HasSuffix(resource, ".geojson") {
 		return GeoJSONType
 	}
-	if strings.HasSuffix(filename, ".gpq") || strings.HasSuffix(filename, ".geoparquet") {
+	if strings.HasSuffix(resource, ".gpq") || strings.HasSuffix(resource, ".geoparquet") {
 		return GeoParquetType
 	}
-	if strings.HasSuffix(filename, ".pq") || strings.HasSuffix(filename, ".parquet") {
+	if strings.HasSuffix(resource, ".pq") || strings.HasSuffix(resource, ".parquet") {
 		return ParquetType
 	}
 	return UnknownType
@@ -116,20 +118,9 @@ func (c *ConvertCmd) Run() error {
 		return NewCommandError("could not determine input format for %s", inputSource)
 	}
 
-	var input ReaderAtSeeker
-	if inputSource == "" {
-		data, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return NewCommandError("trouble reading from stdin: %w", err)
-		}
-		input = bytes.NewReader(data)
-	} else {
-		i, readErr := os.Open(inputSource)
-		if readErr != nil {
-			return NewCommandError("failed to read from %q: %w", inputSource, readErr)
-		}
-		defer i.Close()
-		input = i
+	input, inputErr := readerFromInput(inputSource)
+	if inputErr != nil {
+		return NewCommandError("trouble getting a reader from %q: %w", c.Input, inputErr)
 	}
 
 	var output *os.File

@@ -2,6 +2,8 @@ package command_test
 
 import (
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -14,6 +16,7 @@ type Suite struct {
 	mockStdin      *os.File
 	originalStdout *os.File
 	mockStdout     *os.File
+	server         *httptest.Server
 }
 
 func (s *Suite) SetupTest() {
@@ -28,6 +31,9 @@ func (s *Suite) SetupTest() {
 	s.originalStdout = os.Stdout
 	s.mockStdout = stdout
 	os.Stdout = stdout
+
+	handler := http.FileServer(http.Dir("../../../internal"))
+	s.server = httptest.NewServer(handler)
 }
 
 func (s *Suite) writeStdin(data []byte) {
@@ -58,6 +64,8 @@ func (s *Suite) TearDownTest() {
 
 	_ = s.mockStdout.Close()
 	s.NoError(os.Remove(s.mockStdout.Name()))
+
+	s.server.Close()
 }
 
 func TestSuite(t *testing.T) {

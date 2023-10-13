@@ -120,3 +120,17 @@ func (s *Suite) TestConvertUnknownStdinToGeoParquetStdout() {
 
 	s.ErrorContains(cmd.Run(), "when reading from stdin, the --from option must be provided")
 }
+
+func (s *Suite) TestConvertGeoParquetUrlToGeoJSONStdout() {
+	cmd := &command.ConvertCmd{
+		Input: s.server.URL + "/testdata/cases/example-v1.0.0.parquet",
+		To:    "geojson",
+	}
+
+	s.Require().NoError(cmd.Run())
+	data := s.readStdout()
+
+	collection := &geo.FeatureCollection{}
+	s.Require().NoError(json.Unmarshal(data, collection))
+	s.Len(collection.Features, 5)
+}

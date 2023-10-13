@@ -15,11 +15,9 @@
 package command
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -34,7 +32,7 @@ import (
 )
 
 type DescribeCmd struct {
-	Input        string `arg:"" optional:"" name:"input" help:"Path to a GeoParquet file.  If not provided, input is read from stdin." type:"existingfile"`
+	Input        string `arg:"" optional:"" name:"input" help:"Path or URL for a GeoParquet file.  If not provided, input is read from stdin."`
 	Format       string `help:"Report format.  Possible values: ${enum}." enum:"text, json" default:"text"`
 	MetadataOnly bool   `help:"Print the unformatted geo metadata only (other arguments will be ignored)."`
 	Unpretty     bool   `help:"No newlines or indentation in the JSON output."`
@@ -53,20 +51,9 @@ const (
 )
 
 func (c *DescribeCmd) Run() error {
-	var input ReaderAtSeeker
-	if c.Input == "" {
-		data, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return NewCommandError("trouble reading from stdin: %w", err)
-		}
-		input = bytes.NewReader(data)
-	} else {
-		i, readErr := os.Open(c.Input)
-		if readErr != nil {
-			return NewCommandError("failed to read from %q: %w", c.Input, readErr)
-		}
-		defer i.Close()
-		input = i
+	input, inputErr := readerFromInput(c.Input)
+	if inputErr != nil {
+		return NewCommandError("trouble getting a reader from %q: %w", c.Input, inputErr)
 	}
 
 	fileReader, fileErr := file.NewParquetReader(input)
