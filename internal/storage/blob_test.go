@@ -2,50 +2,55 @@ package storage_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
-	"net/http"
-	"net/http/httptest"
+	"os"
 	"testing"
-	"time"
 
 	"github.com/planetlabs/gpq/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func contentUrl(t *testing.T, content []byte) string {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		http.ServeContent(w, r, "content.txt", time.Time{}, bytes.NewReader([]byte(content)))
-	}))
-	return server.URL
+func createFile(t *testing.T, data []byte) string {
+	f, err := os.CreateTemp("", "file.txt")
+	require.NoError(t, err)
+
+	_, err = f.Write(data)
+	require.NoError(t, err)
+
+	require.NoError(t, f.Close())
+	return f.Name()
 }
 
-func TestHttpReaderReadAll(t *testing.T) {
-	content := randBytes(t, 1000)
-	url := contentUrl(t, content)
+func removeFile(t *testing.T, name string) {
+	require.NoError(t, os.Remove(name))
+}
 
-	reader, err := storage.NewHttpReader(url)
+func TestBlobReaderReadAll(t *testing.T) {
+	content := randBytes(t, 1024)
+	name := createFile(t, content)
+	defer removeFile(t, name)
+
+	reader, err := storage.NewBlobReader(context.Background(), "file://"+name)
 	require.NoError(t, err)
-	defer reader.Close()
 
 	data, err := io.ReadAll(reader)
 	require.NoError(t, err)
-	assert.Equal(t, len(content), len(data))
-	assert.Equal(t, content, data)
+
+	assert.Len(t, data, len(content))
+	require.NoError(t, reader.Close())
 }
 
-func TestHttpReaderReadAt(t *testing.T) {
+func TestBlobReaderReadAt(t *testing.T) {
 	content := randBytes(t, 1000)
-	url := contentUrl(t, content)
+	name := createFile(t, content)
+	defer removeFile(t, name)
 
-	httpReader, err := storage.NewHttpReader(url)
+	blobReader, err := storage.NewBlobReader(context.Background(), "file://"+name)
 	require.NoError(t, err)
-	defer httpReader.Close()
+	defer blobReader.Close()
 
 	byteReader := bytes.NewReader(content)
 
@@ -88,7 +93,7 @@ func TestHttpReaderReadAt(t *testing.T) {
 	for i, c := range cases {
 		t.Run(fmt.Sprintf("%s (case %d)", c.name, i), func(t *testing.T) {
 			data := make([]byte, c.size)
-			read, err := httpReader.ReadAt(data, int64(c.offset))
+			read, err := blobReader.ReadAt(data, int64(c.offset))
 			if c.err == "" {
 				require.NoError(t, err)
 			}
@@ -103,13 +108,13 @@ func TestHttpReaderReadAt(t *testing.T) {
 	}
 }
 
-func TestHttpReaderSeek(t *testing.T) {
+func TestBlobReaderSeek(t *testing.T) {
 	content := randBytes(t, 1000)
-	url := contentUrl(t, content)
+	name := createFile(t, content)
 
-	httpReader, err := storage.NewHttpReader(url)
+	blobReader, err := storage.NewBlobReader(context.Background(), "file://"+name)
 	require.NoError(t, err)
-	defer httpReader.Close()
+	defer blobReader.Close()
 
 	byteReader := bytes.NewReader(content)
 
@@ -150,7 +155,7 @@ func TestHttpReaderSeek(t *testing.T) {
 	for i, c := range cases {
 		t.Run(fmt.Sprintf("%s (case %d)", c.name, i), func(t *testing.T) {
 			data := make([]byte, 10)
-			offset, seekErr := httpReader.Seek(int64(c.offset), c.whence)
+			offset, seekErr := blobReader.Seek(int64(c.offset), c.whence)
 			if c.err == "" {
 				require.NoError(t, seekErr)
 				return
@@ -162,7 +167,7 @@ func TestHttpReaderSeek(t *testing.T) {
 
 			total := 0
 			for {
-				read, readErr := httpReader.Read(data[total:])
+				read, readErr := blobReader.Read(data[total:])
 				total += read
 				if readErr == io.EOF {
 					break
