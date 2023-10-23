@@ -3,7 +3,7 @@ module github.com/planetlabs/gpq
 go 1.21
 
 require (
-	github.com/alecthomas/kong v0.8.0
+	github.com/alecthomas/kong v0.8.1
 	github.com/apache/arrow/go/v14 v14.0.0-20230922164031-772a01c080ad
 	github.com/fatih/color v1.15.0
 	github.com/jedib0t/go-pretty/v6 v6.4.8
