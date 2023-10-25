@@ -23,6 +23,7 @@ type ConvertOptions struct {
 	InputPrimaryColumn string
 	Compression        string
 	RowGroupLength     int
+	ParquetVersion     parquet.Version
 }
 
 func getMetadata(fileReader *file.Reader, convertOptions *ConvertOptions) *Metadata {
@@ -46,9 +47,13 @@ func getMetadata(fileReader *file.Reader, convertOptions *ConvertOptions) *Metad
 	return metadata
 }
 
+var defaultOptions = &ConvertOptions{
+	ParquetVersion: parquet.V2_LATEST,
+}
+
 func FromParquet(input parquet.ReaderAtSeeker, output io.Writer, convertOptions *ConvertOptions) error {
 	if convertOptions == nil {
-		convertOptions = &ConvertOptions{}
+		convertOptions = defaultOptions
 	}
 
 	var compression *compress.Compression
@@ -184,6 +189,7 @@ func FromParquet(input parquet.ReaderAtSeeker, output io.Writer, convertOptions 
 		BeforeClose:     beforeClose,
 		Compression:     compression,
 		RowGroupLength:  convertOptions.RowGroupLength,
+		ParquetVersion:  convertOptions.ParquetVersion,
 	}
 
 	return pqutil.TransformByColumn(config)

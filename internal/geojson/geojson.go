@@ -63,12 +63,14 @@ type ConvertOptions struct {
 	Compression    string
 	RowGroupLength int
 	Metadata       string
+	ParquetVersion parquet.Version
 }
 
 var defaultOptions = &ConvertOptions{
-	MinFeatures: 1,
-	MaxFeatures: 50,
-	Compression: "zstd",
+	MinFeatures:    1,
+	MaxFeatures:    50,
+	Compression:    "zstd",
+	ParquetVersion: parquet.V2_LATEST,
 }
 
 func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions) error {
@@ -80,8 +82,9 @@ func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions
 	builder := pqutil.NewArrowSchemaBuilder()
 	featuresRead := 0
 
-	var pqWriterProps *parquet.WriterProperties
-	var writerOptions []parquet.WriterProperty
+	writerOptions := []parquet.WriterProperty{
+		parquet.WithVersion(convertOptions.ParquetVersion),
+	}
 	if convertOptions.Compression != "" {
 		compression, err := pqutil.GetCompression(convertOptions.Compression)
 		if err != nil {
@@ -92,9 +95,7 @@ func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions
 	if convertOptions.RowGroupLength > 0 {
 		writerOptions = append(writerOptions, parquet.WithMaxRowGroupLength(int64(convertOptions.RowGroupLength)))
 	}
-	if len(writerOptions) > 0 {
-		pqWriterProps = parquet.NewWriterProperties(writerOptions...)
-	}
+	pqWriterProps := parquet.NewWriterProperties(writerOptions...)
 
 	var featureWriter *geoparquet.FeatureWriter
 	writeBuffered := func() error {

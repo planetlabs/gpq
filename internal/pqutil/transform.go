@@ -27,10 +27,14 @@ type TransformConfig struct {
 	TransformSchema SchemaTransformer
 	TransformColumn ColumnTransformer
 	BeforeClose     func(*file.Reader, *file.Writer) error
+	ParquetVersion  parquet.Version
 }
 
 func getWriterProperties(config *TransformConfig, fileReader *file.Reader) (*parquet.WriterProperties, error) {
-	var writerProperties []parquet.WriterProperty
+	writerProperties := []parquet.WriterProperty{
+		parquet.WithVersion(config.ParquetVersion),
+	}
+
 	if config.Compression != nil {
 		writerProperties = append(writerProperties, parquet.WithCompression(*config.Compression))
 	} else {
