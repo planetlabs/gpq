@@ -105,8 +105,6 @@ func TransformByColumn(config *TransformConfig) error {
 	}
 
 	fileWriter := file.NewParquetWriter(config.Writer, outputSchema.Root(), file.WithWriterProps(writerProperties))
-	defer fileWriter.Close()
-
 	ctx := pqarrow.NewArrowWriteContext(context.Background(), nil)
 
 	if config.RowGroupLength > 0 {
@@ -189,7 +187,9 @@ func TransformByColumn(config *TransformConfig) error {
 	}
 
 	if config.BeforeClose != nil {
-		return config.BeforeClose(fileReader, fileWriter)
+		if err := config.BeforeClose(fileReader, fileWriter); err != nil {
+			return err
+		}
 	}
-	return nil
+	return fileWriter.Close()
 }
