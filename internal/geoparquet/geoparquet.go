@@ -12,6 +12,7 @@ import (
 	"github.com/apache/arrow/go/v14/parquet"
 	"github.com/apache/arrow/go/v14/parquet/compress"
 	"github.com/apache/arrow/go/v14/parquet/file"
+	"github.com/apache/arrow/go/v14/parquet/pqarrow"
 	"github.com/apache/arrow/go/v14/parquet/schema"
 	"github.com/paulmach/orb/encoding/wkb"
 	"github.com/paulmach/orb/encoding/wkt"
@@ -154,7 +155,7 @@ func FromParquet(input parquet.ReaderAtSeeker, output io.Writer, convertOptions 
 		return arrow.NewChunked(builder.Type(), transformed), nil
 	}
 
-	beforeClose := func(fileReader *file.Reader, fileWriter *file.Writer) error {
+	beforeClose := func(fileReader *file.Reader, fileWriter *pqarrow.FileWriter) error {
 		metadata := getMetadata(fileReader, convertOptions)
 		for name, geometryCol := range metadata.Columns {
 			if !datasetInfo.HasCollection(name) {
