@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/apache/arrow/go/v14/arrow"
@@ -14,6 +15,7 @@ import (
 	"github.com/apache/arrow/go/v14/parquet"
 	"github.com/apache/arrow/go/v14/parquet/compress"
 	"github.com/apache/arrow/go/v14/parquet/file"
+	"github.com/apache/arrow/go/v14/parquet/pqarrow"
 	"github.com/apache/arrow/go/v14/parquet/schema"
 	"github.com/planetlabs/gpq/internal/pqutil"
 	"github.com/planetlabs/gpq/internal/test"
@@ -121,6 +123,70 @@ func TestTransformByColumn(t *testing.T) {
 			}
 		})
 	}
+}
+
+func makeOvertureData(t *testing.T) (string, []byte) {
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "sources", Nullable: true, Type: arrow.ListOf(arrow.StructOf(
+			arrow.Field{Name: "property", Nullable: true, Type: arrow.BinaryTypes.String},
+			arrow.Field{Name: "dataset", Nullable: true, Type: arrow.BinaryTypes.String},
+			arrow.Field{Name: "recordId", Nullable: true, Type: arrow.BinaryTypes.String},
+			arrow.Field{Name: "confidence", Nullable: true, Type: arrow.PrimitiveTypes.Float64},
+		))},
+		{Name: "bbox", Nullable: false, Type: arrow.StructOf(
+			arrow.Field{Name: "minx", Nullable: true, Type: arrow.PrimitiveTypes.Float64},
+			arrow.Field{Name: "maxx", Nullable: true, Type: arrow.PrimitiveTypes.Float64},
+			arrow.Field{Name: "miny", Nullable: true, Type: arrow.PrimitiveTypes.Float64},
+			arrow.Field{Name: "maxy", Nullable: true, Type: arrow.PrimitiveTypes.Float64},
+		)},
+	}, nil)
+
+	expected := `[
+		{
+			"sources": [
+				{
+					"property": "",
+					"recordId": "record-1",
+					"dataset": "test",
+					"confidence": null
+				}
+			],
+			"bbox": {
+				"minx": -180,
+				"maxx": -180,
+				"miny": -90,
+				"maxy": -90
+			}
+		}
+	]`
+	record, _, err := array.RecordFromJSON(memory.DefaultAllocator, schema, strings.NewReader(expected))
+	require.NoError(t, err)
+
+	output := &bytes.Buffer{}
+	writer, err := pqarrow.NewFileWriter(schema, output, nil, pqarrow.DefaultWriterProps())
+	require.NoError(t, err)
+
+	require.NoError(t, writer.Write(record))
+	require.NoError(t, writer.Close())
+
+	return expected, output.Bytes()
+}
+
+func TestTransformOverture(t *testing.T) {
+	// minimal reproduction of https://github.com/planetlabs/gpq/issues/102
+	expected, parquetData := makeOvertureData(t)
+
+	input := bytes.NewReader(parquetData)
+	output := &bytes.Buffer{}
+	config := &pqutil.TransformConfig{
+		Reader: input,
+		Writer: output,
+	}
+
+	require.NoError(t, pqutil.TransformByColumn(config))
+
+	outputAsJSON := test.ParquetToJSON(t, bytes.NewReader(output.Bytes()))
+	assert.JSONEq(t, expected, outputAsJSON)
 }
 
 func TestTransformByRowGroupLength(t *testing.T) {

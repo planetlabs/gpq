@@ -28,6 +28,7 @@ import (
 
 	"github.com/apache/arrow/go/v14/parquet"
 	"github.com/apache/arrow/go/v14/parquet/file"
+	"github.com/apache/arrow/go/v14/parquet/pqarrow"
 	"github.com/paulmach/orb"
 	"github.com/paulmach/orb/encoding/wkb"
 	"github.com/planetlabs/gpq/internal/geojson"
@@ -87,7 +88,7 @@ func (s *Suite) copyWithMetadata(input parquet.ReaderAtSeeker, output io.Writer,
 	config := &pqutil.TransformConfig{
 		Reader: input,
 		Writer: output,
-		BeforeClose: func(fileReader *file.Reader, fileWriter *file.Writer) error {
+		BeforeClose: func(fileReader *file.Reader, fileWriter *pqarrow.FileWriter) error {
 			return fileWriter.AppendKeyValueMetadata(geoparquet.MetadataKey, metadata)
 		},
 	}

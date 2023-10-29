@@ -26,7 +26,7 @@ type TransformConfig struct {
 	RowGroupLength  int
 	TransformSchema SchemaTransformer
 	TransformColumn ColumnTransformer
-	BeforeClose     func(*file.Reader, *file.Writer) error
+	BeforeClose     func(*file.Reader, *pqarrow.FileWriter) error
 }
 
 func getWriterProperties(config *TransformConfig, fileReader *file.Reader) (*parquet.WriterProperties, error) {
@@ -104,7 +104,16 @@ func TransformByColumn(config *TransformConfig) error {
 		return propErr
 	}
 
-	fileWriter := file.NewParquetWriter(config.Writer, outputSchema.Root(), file.WithWriterProps(writerProperties))
+	arrowSchema, arrowSchemaErr := pqarrow.FromParquet(outputSchema, &arrowReadProperties, fileReader.MetaData().KeyValueMetadata())
+	if arrowSchemaErr != nil {
+		return arrowSchemaErr
+	}
+
+	fileWriter, fileWriterErr := pqarrow.NewFileWriter(arrowSchema, config.Writer, writerProperties, pqarrow.DefaultWriterProps())
+	if fileWriterErr != nil {
+		return fileWriterErr
+	}
+
 	ctx := pqarrow.NewArrowWriteContext(context.Background(), nil)
 
 	if config.RowGroupLength > 0 {
@@ -120,7 +129,8 @@ func TransformByColumn(config *TransformConfig) error {
 		numRows := fileReader.NumRows()
 		numRowsWritten := int64(0)
 		for {
-			rowGroupWriter := fileWriter.AppendRowGroup()
+			fileWriter.NewRowGroup()
+			numRowsInGroup := 0
 			for fieldNum := 0; fieldNum < numFields; fieldNum += 1 {
 				colReader := columnReaders[fieldNum]
 				arr, readErr := colReader.NextBatch(int64(config.RowGroupLength))
@@ -139,17 +149,13 @@ func TransformByColumn(config *TransformConfig) error {
 					}
 					arr = transformed
 				}
-				colWriter, colWriterErr := pqarrow.NewArrowColumnWriter(arr, 0, int64(arr.Len()), outputManifest, rowGroupWriter, fieldNum)
-				if colWriterErr != nil {
-					return colWriterErr
+				if numRowsInGroup == 0 {
+					// TODO: propose fileWriter.RowGroupNumRows()
+					numRowsInGroup = arr.Len()
 				}
-				if err := colWriter.Write(ctx); err != nil {
+				if err := fileWriter.WriteColumnChunked(arr, 0, int64(arr.Len())); err != nil {
 					return err
 				}
-			}
-			numRowsInGroup, err := rowGroupWriter.NumRows()
-			if err != nil {
-				return err
 			}
 			numRowsWritten += int64(numRowsInGroup)
 			if numRowsWritten >= numRows {
@@ -160,7 +166,7 @@ func TransformByColumn(config *TransformConfig) error {
 		numRowGroups := fileReader.NumRowGroups()
 		for rowGroupIndex := 0; rowGroupIndex < numRowGroups; rowGroupIndex += 1 {
 			rowGroupReader := arrowReader.RowGroup(rowGroupIndex)
-			rowGroupWriter := fileWriter.AppendRowGroup()
+			fileWriter.NewRowGroup()
 			for fieldNum := 0; fieldNum < numFields; fieldNum += 1 {
 				arr, readErr := rowGroupReader.Column(fieldNum).Read(ctx)
 				if readErr != nil {
@@ -175,11 +181,7 @@ func TransformByColumn(config *TransformConfig) error {
 					}
 					arr = transformed
 				}
-				colWriter, colWriterErr := pqarrow.NewArrowColumnWriter(arr, 0, int64(arr.Len()), outputManifest, rowGroupWriter, fieldNum)
-				if colWriterErr != nil {
-					return colWriterErr
-				}
-				if err := colWriter.Write(ctx); err != nil {
+				if err := fileWriter.WriteColumnChunked(arr, 0, int64(arr.Len())); err != nil {
 					return err
 				}
 			}
