@@ -5,7 +5,7 @@ go 1.21
 require (
 	github.com/alecthomas/kong v0.8.1
 	github.com/apache/arrow/go/v14 v14.0.1
-	github.com/fatih/color v1.15.0
+	github.com/fatih/color v1.16.0
 	github.com/jedib0t/go-pretty/v6 v6.4.9
 	github.com/paulmach/orb v0.10.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
@@ -26,7 +26,7 @@ require (
 	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.5 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.19 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
 	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
