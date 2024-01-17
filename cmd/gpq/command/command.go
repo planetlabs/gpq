@@ -2,10 +2,11 @@ package command
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
-	"strings"
 
 	"github.com/planetlabs/gpq/internal/storage"
 )
@@ -42,8 +43,8 @@ func readerFromInput(input string) (storage.ReaderAtSeeker, error) {
 		return bytes.NewReader(data), nil
 	}
 
-	if strings.HasPrefix(input, "http://") || strings.HasPrefix(input, "https://") {
-		return storage.NewHttpReader(input)
+	if u, err := url.Parse(input); err == nil && u.Scheme != "" {
+		return storage.NewReader(context.Background(), input)
 	}
 
 	return os.Open(input)

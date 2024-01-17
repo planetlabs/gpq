@@ -25,8 +25,6 @@ type HttpReader struct {
 	validator    string
 }
 
-var _ ReaderAtSeeker = (*HttpReader)(nil)
-
 func NewHttpReader(url string) (*HttpReader, error) {
 	reader := &HttpReader{
 		url:    url,
@@ -177,9 +175,10 @@ func (r *HttpReader) request(size int64) error {
 	return nil
 }
 
-func (r *HttpReader) Close() {
+func (r *HttpReader) Close() error {
 	if r.buffer != nil {
 		r.buffer = nil
 	}
 	r.client.CloseIdleConnections()
+	return nil
 }
