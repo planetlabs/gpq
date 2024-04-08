@@ -58,7 +58,7 @@ async function getGQP() {
   const go = new Go();
   const result = await WebAssembly.instantiateStreaming(
     fetch(new URL('./gpq.wasm', import.meta.url)),
-    go.importObject
+    go.importObject,
   );
   go.run(result.instance);
 
@@ -140,7 +140,7 @@ function formatSize(bytes) {
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.min(
     Math.floor(Math.log(bytes) / Math.log(1024)),
-    sizes.length - 1
+    sizes.length - 1,
   );
   if (i === 0) {
     return `${bytes} ${sizes[i]}`;
@@ -222,7 +222,9 @@ class Upload extends LitElement {
     }
 
     .file input:focus ~ .file-custom {
-      box-shadow: 0 0 0 0.075rem #fff, 0 0 0 0.2rem #0074d9;
+      box-shadow:
+        0 0 0 0.075rem #fff,
+        0 0 0 0.2rem #0074d9;
     }
   `;
 
@@ -395,7 +397,7 @@ class Converter extends LitElement {
         summary = `${output.records} row${plural}, ${size}`;
       } else {
         throw new Error(
-          'Only works with .parquet, .geoparquet, .geojson, and .json files'
+          'Only works with .parquet, .geoparquet, .geojson, and .json files',
         );
       }
     } catch (err) {
