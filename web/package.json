@@ -6,7 +6,7 @@
   },
   "devDependencies": {
     "eslint": "^8.40.0",
-    "eslint-config-planet": "^20.0.3",
+    "eslint-config-planet": "^21.1.0",
     "vite": "^5.0.0"
   },
   "eslintConfig": {
