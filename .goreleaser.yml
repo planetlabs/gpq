@@ -50,7 +50,7 @@ changelog:
   sort: asc
   use: github-native
 brews:
-  - tap:
+  - repository:
       owner: planetlabs
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
