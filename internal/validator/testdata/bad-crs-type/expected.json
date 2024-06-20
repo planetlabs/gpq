@@ -48,58 +48,58 @@
     },
     {
       "title": "optional \"orientation\" must be a valid string",
-      "passed": false,
-      "run": false
+      "run": false,
+      "passed": false
     },
     {
       "title": "optional \"edges\" must be a valid string",
-      "passed": false,
-      "run": false
+      "run": false,
+      "passed": false
     },
     {
       "title": "optional \"bbox\" must be an array of 4 or 6 numbers",
-      "passed": false,
-      "run": false
+      "run": false,
+      "passed": false
     },
     {
       "title": "optional \"epoch\" must be a number",
-      "passed": false,
-      "run": false
+      "run": false,
+      "passed": false
     },
     {
       "title": "geometry columns must not be grouped",
-      "passed": false,
-      "run": false
+      "run": false,
+      "passed": false
     },
     {
       "title": "geometry columns must be stored using the BYTE_ARRAY parquet type",
-      "passed": false,
-      "run": false
+      "run": false,
+      "passed": false
     },
     {
       "title": "geometry columns must be required or optional, not repeated",
-      "passed": false,
-      "run": false
+      "run": false,
+      "passed": false
     },
     {
       "title": "all geometry values match the \"encoding\" metadata",
-      "passed": false,
-      "run": false
+      "run": false,
+      "passed": false
     },
     {
       "title": "all geometry types must be included in the \"geometry_types\" metadata (if not empty)",
-      "passed": false,
-      "run": false
+      "run": false,
+      "passed": false
     },
     {
       "title": "all polygon geometries must follow the \"orientation\" metadata (if present)",
-      "passed": false,
-      "run": false
+      "run": false,
+      "passed": false
     },
     {
       "title": "all geometries must fall within the \"bbox\" metadata (if present)",
-      "passed": false,
-      "run": false
+      "run": false,
+      "passed": false
     }
   ],
   "metadataOnly": false

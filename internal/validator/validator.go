@@ -237,6 +237,9 @@ func (v *Validator) Report(ctx context.Context, file *file.Reader) (*Report, err
 				if err != nil {
 					return nil, fmt.Errorf("failed to decode geometry for %q: %w", field.Name, err)
 				}
+				if geometry == nil {
+					continue
+				}
 				for i, rule := range decodedGeometryRules {
 					check := decodedGeometryChecks[i]
 					if err := rule.Value(field.Name, geometry.Geometry()); errors.Is(err, ErrFatal) {

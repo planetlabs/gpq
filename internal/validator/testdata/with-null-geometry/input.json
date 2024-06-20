@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "primary_column": "geometry",
+    "columns": {
+      "geometry": {
+        "encoding": "WKB",
+        "geometry_types": ["Point"]
+      }
+    }
+  },
+  "data": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "with geometry"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [0, 0]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "without geometry"
+        },
+        "geometry": null
+      }
+    ]
+  }
+}
