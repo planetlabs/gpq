@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/apache/arrow/go/v14/parquet"
+	"github.com/apache/arrow/go/v16/parquet"
 	"github.com/planetlabs/gpq/internal/geo"
 	"github.com/planetlabs/gpq/internal/geoparquet"
 	"github.com/planetlabs/gpq/internal/pqutil"

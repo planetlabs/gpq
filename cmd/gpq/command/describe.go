@@ -22,9 +22,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/apache/arrow/go/v14/parquet"
-	"github.com/apache/arrow/go/v14/parquet/file"
-	"github.com/apache/arrow/go/v14/parquet/schema"
+	"github.com/apache/arrow/go/v16/parquet"
+	"github.com/apache/arrow/go/v16/parquet/file"
+	"github.com/apache/arrow/go/v16/parquet/schema"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/planetlabs/gpq/internal/geoparquet"

@@ -26,9 +26,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apache/arrow/go/v14/parquet"
-	"github.com/apache/arrow/go/v14/parquet/file"
-	"github.com/apache/arrow/go/v14/parquet/pqarrow"
+	"github.com/apache/arrow/go/v16/parquet"
+	"github.com/apache/arrow/go/v16/parquet/file"
+	"github.com/apache/arrow/go/v16/parquet/pqarrow"
 	"github.com/paulmach/orb"
 	"github.com/paulmach/orb/encoding/wkb"
 	"github.com/planetlabs/gpq/internal/geojson"

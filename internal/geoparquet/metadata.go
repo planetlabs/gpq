@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/apache/arrow/go/v14/parquet/metadata"
+	"github.com/apache/arrow/go/v16/parquet/metadata"
 	"github.com/planetlabs/gpq/internal/geo"
 )
 

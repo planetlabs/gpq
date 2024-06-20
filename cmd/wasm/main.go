@@ -21,7 +21,7 @@ import (
 	"strings"
 	"syscall/js"
 
-	"github.com/apache/arrow/go/v14/parquet/file"
+	"github.com/apache/arrow/go/v16/parquet/file"
 	"github.com/planetlabs/gpq/internal/geojson"
 	"github.com/planetlabs/gpq/internal/geoparquet"
 	"github.com/planetlabs/gpq/internal/pqutil"

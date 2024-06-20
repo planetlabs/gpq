@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/apache/arrow/go/v14/arrow"
-	"github.com/apache/arrow/go/v14/arrow/array"
+	"github.com/apache/arrow/go/v16/arrow"
+	"github.com/apache/arrow/go/v16/arrow/array"
 	orbjson "github.com/paulmach/orb/geojson"
 	"github.com/planetlabs/gpq/internal/geo"
 	"github.com/planetlabs/gpq/internal/geoparquet"

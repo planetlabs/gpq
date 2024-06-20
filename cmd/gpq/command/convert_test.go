@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 
-	"github.com/apache/arrow/go/v14/parquet/file"
+	"github.com/apache/arrow/go/v16/parquet/file"
 	"github.com/planetlabs/gpq/cmd/gpq/command"
 	"github.com/planetlabs/gpq/internal/geo"
 	"github.com/planetlabs/gpq/internal/test"

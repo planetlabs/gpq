@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/apache/arrow/go/v14/arrow"
-	"github.com/apache/arrow/go/v14/parquet/pqarrow"
+	"github.com/apache/arrow/go/v16/arrow"
+	"github.com/apache/arrow/go/v16/parquet/pqarrow"
 	"github.com/planetlabs/gpq/internal/pqutil"
 	"github.com/planetlabs/gpq/internal/test"
 	"github.com/stretchr/testify/assert"
