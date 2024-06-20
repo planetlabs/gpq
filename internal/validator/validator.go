@@ -21,9 +21,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/apache/arrow/go/v14/arrow/array"
-	"github.com/apache/arrow/go/v14/parquet"
-	"github.com/apache/arrow/go/v14/parquet/file"
+	"github.com/apache/arrow/go/v16/arrow/array"
+	"github.com/apache/arrow/go/v16/parquet"
+	"github.com/apache/arrow/go/v16/parquet/file"
 	"github.com/paulmach/orb"
 	"github.com/planetlabs/gpq/internal/geo"
 	"github.com/planetlabs/gpq/internal/geoparquet"

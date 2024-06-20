@@ -3,7 +3,7 @@ package command_test
 import (
 	"encoding/json"
 
-	"github.com/apache/arrow/go/v14/parquet"
+	"github.com/apache/arrow/go/v16/parquet"
 	"github.com/planetlabs/gpq/cmd/gpq/command"
 	"github.com/planetlabs/gpq/internal/test"
 )

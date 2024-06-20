@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/apache/arrow/go/v14/arrow"
+	"github.com/apache/arrow/go/v16/arrow"
 	"github.com/planetlabs/gpq/internal/geo"
 )
 

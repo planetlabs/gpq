@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 
-	"github.com/apache/arrow/go/v14/arrow"
-	"github.com/apache/arrow/go/v14/arrow/memory"
-	"github.com/apache/arrow/go/v14/parquet"
-	"github.com/apache/arrow/go/v14/parquet/file"
-	"github.com/apache/arrow/go/v14/parquet/pqarrow"
-	"github.com/apache/arrow/go/v14/parquet/schema"
+	"github.com/apache/arrow/go/v16/arrow"
+	"github.com/apache/arrow/go/v16/arrow/memory"
+	"github.com/apache/arrow/go/v16/parquet"
+	"github.com/apache/arrow/go/v16/parquet/file"
+	"github.com/apache/arrow/go/v16/parquet/pqarrow"
+	"github.com/apache/arrow/go/v16/parquet/schema"
 )
 
 const (

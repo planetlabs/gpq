@@ -3,7 +3,7 @@ package pqutil
 import (
 	"fmt"
 
-	"github.com/apache/arrow/go/v14/parquet/compress"
+	"github.com/apache/arrow/go/v16/parquet/compress"
 )
 
 func GetCompression(codec string) (compress.Compression, error) {
