@@ -117,6 +117,9 @@ func DecodeGeometry(value any, encoding string) (*orbjson.Geometry, error) {
 		if !ok {
 			return nil, fmt.Errorf("expected bytes for wkb geometry, got %T", value)
 		}
+		if len(data) == 0 {
+			return nil, nil
+		}
 		g, err := wkb.Unmarshal(data)
 		if err != nil {
 			return nil, err
