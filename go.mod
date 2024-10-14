@@ -10,7 +10,7 @@ require (
 	github.com/paulmach/orb v0.11.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/stretchr/testify v1.9.0
-	gocloud.dev v0.39.0
+	gocloud.dev v0.40.0
 	golang.org/x/term v0.25.0
 )
 
