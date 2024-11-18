@@ -17,6 +17,7 @@ package command
 import (
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/planetlabs/gpq/internal/geojson"
@@ -52,6 +53,8 @@ var validTypes = map[FormatType]bool{
 	GeoJSONType:    true,
 }
 
+var geoJsonMatcher *regexp.Regexp
+
 func parseFormatType(format string) FormatType {
 	if format == "" {
 		return AutoType
@@ -67,7 +70,7 @@ func getFormatType(resource string) FormatType {
 	if u, err := url.Parse(resource); err == nil {
 		resource = u.Path
 	}
-	if strings.HasSuffix(resource, ".json") || strings.HasSuffix(resource, ".geojson") {
+	if geoJsonMatcher.MatchString(resource) {
 		return GeoJSONType
 	}
 	if strings.HasSuffix(resource, ".gpq") || strings.HasSuffix(resource, ".geoparquet") {
@@ -95,6 +98,8 @@ func (c *ConvertCmd) Run() error {
 		outputSource = inputSource
 		inputSource = ""
 	}
+
+	geoJsonMatcher = regexp.MustCompile(`.+\.(geojson|json|ndjson|ndgeojson|geojsonl)$`)
 
 	outputFormat := parseFormatType(c.To)
 	if outputFormat == AutoType {

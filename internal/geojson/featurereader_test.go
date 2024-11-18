@@ -92,6 +92,34 @@ func TestFeatureReaderSingleFeature(t *testing.T) {
 	assert.Equal(t, map[string]any{"name": "test"}, feature.Properties)
 }
 
+func TestFeatureReaderNewLineDelimited(t *testing.T) {
+	file, openErr := os.Open("testdata/new-line-delimited.ndgeojson")
+	require.NoError(t, openErr)
+
+	reader := geojson.NewFeatureReader(file)
+
+	features := []*geo.Feature{}
+	for {
+		feature, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		features = append(features, feature)
+	}
+	require.Len(t, features, 5)
+
+	fiji := features[0]
+	assert.NotNil(t, fiji.Geometry)
+	assert.Equal(t, "Oceania", fiji.Properties["continent"])
+	assert.Equal(t, float64(920938), fiji.Properties["pop_est"])
+
+	usa := features[4]
+	assert.NotNil(t, usa.Geometry)
+	assert.Equal(t, "North America", usa.Properties["continent"])
+	assert.Equal(t, float64(326625791), usa.Properties["pop_est"])
+}
+
 func TestFeatureReaderEmptyFeatureCollection(t *testing.T) {
 	file, openErr := os.Open("testdata/empty-collection.geojson")
 	require.NoError(t, openErr)
