@@ -67,6 +67,9 @@ func (r *FeatureReader) Read() (*geo.Feature, error) {
 
 		delim, ok := keyToken.(json.Delim)
 		if ok && delim == json.Delim('}') {
+			if r.decoder.More() {
+				r.collection = true
+			}
 			if feature == nil {
 				return nil, errors.New("expected a FeatureCollection, a Feature, or a Geometry object")
 			}

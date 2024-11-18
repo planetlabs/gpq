@@ -17,6 +17,8 @@ package command
 import (
 	"net/url"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/planetlabs/gpq/internal/geojson"
@@ -63,19 +65,38 @@ func parseFormatType(format string) FormatType {
 	return ft
 }
 
+var geoParquetSuffixes = []string{
+	".gpq", ".geoparquet",
+}
+
+var parquetSuffixes = []string{
+	".pq", ".parquet",
+}
+
+var geoJsonSuffixes = []string{
+	".geojson",
+	".json",
+	".ndjson",
+	".ndgeojson",
+	".geojsonl",
+}
+
 func getFormatType(resource string) FormatType {
 	if u, err := url.Parse(resource); err == nil {
 		resource = u.Path
 	}
-	if strings.HasSuffix(resource, ".json") || strings.HasSuffix(resource, ".geojson") {
-		return GeoJSONType
-	}
-	if strings.HasSuffix(resource, ".gpq") || strings.HasSuffix(resource, ".geoparquet") {
+
+	ext := filepath.Ext(resource)
+	if slices.Contains(geoParquetSuffixes, ext) {
 		return GeoParquetType
 	}
-	if strings.HasSuffix(resource, ".pq") || strings.HasSuffix(resource, ".parquet") {
+	if slices.Contains(parquetSuffixes, ext) {
 		return ParquetType
 	}
+	if slices.Contains(geoJsonSuffixes, ext) {
+		return GeoJSONType
+	}
+
 	return UnknownType
 }
 
