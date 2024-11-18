@@ -17,7 +17,8 @@ package command
 import (
 	"net/url"
 	"os"
-	"regexp"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/planetlabs/gpq/internal/geojson"
@@ -53,8 +54,6 @@ var validTypes = map[FormatType]bool{
 	GeoJSONType:    true,
 }
 
-var geoJsonMatcher *regexp.Regexp
-
 func parseFormatType(format string) FormatType {
 	if format == "" {
 		return AutoType
@@ -66,19 +65,38 @@ func parseFormatType(format string) FormatType {
 	return ft
 }
 
+var geoParquetSuffixes = []string{
+	".gpq", ".geoparquet",
+}
+
+var parquetSuffixes = []string{
+	".pq", ".parquet",
+}
+
+var geoJsonSuffixes = []string{
+	".geojson",
+	".json",
+	".ndjson",
+	".ndgeojson",
+	".geojsonl",
+}
+
 func getFormatType(resource string) FormatType {
 	if u, err := url.Parse(resource); err == nil {
 		resource = u.Path
 	}
-	if geoJsonMatcher.MatchString(resource) {
-		return GeoJSONType
-	}
-	if strings.HasSuffix(resource, ".gpq") || strings.HasSuffix(resource, ".geoparquet") {
+
+	ext := filepath.Ext(resource)
+	if slices.Contains(geoParquetSuffixes, ext) {
 		return GeoParquetType
 	}
-	if strings.HasSuffix(resource, ".pq") || strings.HasSuffix(resource, ".parquet") {
+	if slices.Contains(parquetSuffixes, ext) {
 		return ParquetType
 	}
+	if slices.Contains(geoJsonSuffixes, ext) {
+		return GeoJSONType
+	}
+
 	return UnknownType
 }
 
@@ -98,8 +116,6 @@ func (c *ConvertCmd) Run() error {
 		outputSource = inputSource
 		inputSource = ""
 	}
-
-	geoJsonMatcher = regexp.MustCompile(`.+\.(geojson|json|ndjson|ndgeojson|geojsonl)$`)
 
 	outputFormat := parseFormatType(c.To)
 	if outputFormat == AutoType {

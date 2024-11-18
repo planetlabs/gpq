@@ -120,6 +120,20 @@ func TestFeatureReaderNewLineDelimited(t *testing.T) {
 	assert.Equal(t, float64(326625791), usa.Properties["pop_est"])
 }
 
+func TestFeatureReaderBadNewLineDelimited(t *testing.T) {
+	file, openErr := os.Open("testdata/bad-new-line-delimited.ndgeojson")
+	require.NoError(t, openErr)
+
+	reader := geojson.NewFeatureReader(file)
+
+	first, err := reader.Read()
+	require.NoError(t, err)
+	assert.Equal(t, "Oceania", first.Properties["continent"])
+
+	_, err = reader.Read()
+	assert.ErrorContains(t, err, "unexpected end of JSON input")
+}
+
 func TestFeatureReaderEmptyFeatureCollection(t *testing.T) {
 	file, openErr := os.Open("testdata/empty-collection.geojson")
 	require.NoError(t, openErr)
