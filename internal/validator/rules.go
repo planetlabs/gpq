@@ -154,7 +154,7 @@ func RequiredMetadataType() Rule {
 		validate: func(file *file.Reader) error {
 			value, geoErr := geoparquet.GetMetadataValue(file.MetaData().KeyValueMetadata())
 			if geoErr != nil {
-				return fatal(geoErr.Error())
+				return fatal("%s", geoErr.Error())
 			}
 
 			metadataMap := map[string]any{}

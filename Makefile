@@ -11,7 +11,7 @@ wasm: web/wasm_exec.js ## Build wasm
 	@GOOS=js GOARCH=wasm go build -tags noasm -o web/gpq.wasm ./cmd/wasm/.
 
 web/wasm_exec.js: ## Copy the wasm_exec.js file
-	@cp "$$(go env GOROOT)/misc/wasm/wasm_exec.js" web
+	@cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" web
 
 .PHONY: test
 test: ## Run the tests
