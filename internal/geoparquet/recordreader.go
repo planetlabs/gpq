@@ -151,7 +151,7 @@ func NewRecordReader(config *ReaderConfig) (*RecordReader, error) {
 			// generate indices from col names and compute the indices to include
 			indicesToExclude := newIndicesSet(schema.NumFields()-len(config.ExcludeColNames)).FromColNames(config.ExcludeColNames, schema)
 			allIndices := newIndicesSet(schema.NumFields())
-			for i := range schema.NumFields() {
+			for i := 0; i < schema.NumFields(); i++ {
 				allIndices.Add(i)
 			}
 			indices := allIndices.Difference(indicesToExclude)
