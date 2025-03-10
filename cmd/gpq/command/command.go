@@ -15,6 +15,7 @@ var CLI struct {
 	Convert  ConvertCmd  `cmd:"" help:"Convert data from one format to another."`
 	Validate ValidateCmd `cmd:"" help:"Validate a GeoParquet file."`
 	Describe DescribeCmd `cmd:"" help:"Describe a GeoParquet file."`
+	Extract  ExtractCmd  `cmd:"" help:"Extract columns by name or rows by spatial subsetting."`
 	Version  VersionCmd  `cmd:"" help:"Print the version of this program."`
 }
 
@@ -48,4 +49,12 @@ func readerFromInput(input string) (storage.ReaderAtSeeker, error) {
 	}
 
 	return os.Open(input)
+}
+
+func hasStdin() bool {
+	stats, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return stats.Size() > 0
 }

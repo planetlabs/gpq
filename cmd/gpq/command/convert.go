@@ -32,7 +32,7 @@ type ConvertCmd struct {
 	To                 string `help:"Output file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet" default:"auto"`
 	Min                int    `help:"Minimum number of features to consider when building a schema." default:"10"`
 	Max                int    `help:"Maximum number of features to consider when building a schema." default:"100"`
-	InputPrimaryColumn string `help:"Primary geometry column name when reading Parquet withtout metadata." default:"geometry"`
+	InputPrimaryColumn string `help:"Primary geometry column name when reading Parquet without metadata." default:"geometry"`
 	Compression        string `help:"Parquet compression to use.  Possible values: ${enum}." enum:"uncompressed, snappy, gzip, brotli, zstd" default:"zstd"`
 	RowGroupLength     int    `help:"Maximum number of rows per group when writing Parquet."`
 }
@@ -98,14 +98,6 @@ func getFormatType(resource string) FormatType {
 	}
 
 	return UnknownType
-}
-
-func hasStdin() bool {
-	stats, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return stats.Size() > 0
 }
 
 func (c *ConvertCmd) Run() error {

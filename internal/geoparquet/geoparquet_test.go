@@ -137,6 +137,7 @@ func TestRowReaderV100Beta1(t *testing.T) {
 	require.NoError(t, err)
 
 	numRows := 0
+	var numCols int
 	for {
 		record, err := reader.Read()
 		if err == io.EOF {
@@ -144,9 +145,72 @@ func TestRowReaderV100Beta1(t *testing.T) {
 		}
 		require.NoError(t, err)
 		numRows += int(record.NumRows())
+		numCols = int(record.NumCols())
 	}
 
 	assert.Equal(t, 5, numRows)
+	assert.Equal(t, 6, numCols)
+}
+
+func TestRecordReaderV100ExcludeCols(t *testing.T) {
+	fixturePath := "../testdata/cases/example-v1.0.0.parquet"
+	input, openErr := os.Open(fixturePath)
+	require.NoError(t, openErr)
+
+	reader, err := geoparquet.NewRecordReader(&geoparquet.ReaderConfig{
+		Reader:          input,
+		ExcludeColNames: []string{"continent", "gdp_md_est"},
+	})
+	require.NoError(t, err)
+
+	record, err := reader.Read()
+	require.NoError(t, err)
+	assert.Equal(t, record.NumCols(), int64(4))
+
+	fields := record.Schema().Fields()
+	colNames := make([]string, len(fields))
+	for idx, field := range fields {
+		colNames[idx] = field.Name
+	}
+
+	assert.ElementsMatch(t, colNames, []string{"geometry", "pop_est", "iso_a3", "name"})
+}
+
+func TestRecordReaderV110IncludeCols(t *testing.T) {
+	fixturePath := "../testdata/cases/example-v1.0.0.parquet"
+	input, openErr := os.Open(fixturePath)
+	require.NoError(t, openErr)
+
+	reader, err := geoparquet.NewRecordReader(&geoparquet.ReaderConfig{
+		Reader:          input,
+		IncludeColNames: []string{"geometry", "continent", "gdp_md_est"},
+	})
+	require.NoError(t, err)
+
+	record, err := reader.Read()
+	require.NoError(t, err)
+	assert.Equal(t, record.NumCols(), int64(3))
+
+	fields := record.Schema().Fields()
+	colNames := make([]string, len(fields))
+	for idx, field := range fields {
+		colNames[idx] = field.Name
+	}
+
+	assert.ElementsMatch(t, colNames, []string{"geometry", "continent", "gdp_md_est"})
+}
+
+func TestRecordReaderV110NoGeomColError(t *testing.T) {
+	fixturePath := "../testdata/cases/example-v1.1.0.parquet"
+	input, openErr := os.Open(fixturePath)
+	require.NoError(t, openErr)
+
+	reader, err := geoparquet.NewRecordReader(&geoparquet.ReaderConfig{
+		Reader:          input,
+		IncludeColNames: []string{"continent", "gdp_md_est"},
+	})
+	require.ErrorContains(t, err, "geometry column")
+	require.Nil(t, reader)
 }
 
 func toWKB(t *testing.T, geometry orb.Geometry) []byte {
@@ -393,4 +457,132 @@ func TestRecordReading(t *testing.T) {
 	}
 
 	assert.Equal(t, reader.NumRows(), int64(numRows))
+}
+
+func TestGetBboxColumnIdxV100(t *testing.T) {
+	f, fileErr := os.Open("../testdata/cases/example-v1.0.0.parquet")
+	require.NoError(t, fileErr)
+	reader, readerErr := file.NewParquetReader(f)
+	require.NoError(t, readerErr)
+	defer reader.Close()
+
+	metadata, err := geoparquet.GetMetadata(reader.MetaData().KeyValueMetadata())
+	require.NoError(t, err)
+
+	// no bbox col in the file, we expect -1
+	colIdx := geoparquet.GetBboxColumnIndex(reader.MetaData().Schema, metadata)
+	require.Equal(t, -1, colIdx)
+}
+
+func TestGetBboxColumnIdxV110(t *testing.T) {
+	f, fileErr := os.Open("../testdata/cases/example-v1.1.0.parquet")
+	require.NoError(t, fileErr)
+	reader, readerErr := file.NewParquetReader(f)
+	require.NoError(t, readerErr)
+	defer reader.Close()
+
+	metadata, err := geoparquet.GetMetadata(reader.MetaData().KeyValueMetadata())
+	require.NoError(t, err)
+
+	// there is a bbox col in the file, we expect index 6
+	colIdx := geoparquet.GetBboxColumnIndex(reader.MetaData().Schema, metadata)
+	require.Equal(t, 6, colIdx)
+}
+
+func TestGetBboxColumnIdxV110NonStandardBboxCol(t *testing.T) {
+	f, fileErr := os.Open("../testdata/cases/example-v1.1.0-covering.parquet")
+	require.NoError(t, fileErr)
+	reader, readerErr := file.NewParquetReader(f)
+	require.NoError(t, readerErr)
+	defer reader.Close()
+
+	metadata, err := geoparquet.GetMetadata(reader.MetaData().KeyValueMetadata())
+	require.NoError(t, err)
+
+	// there is a bbox col in the file with the non-standard name "geometry_bbox",
+	// we expect index 6
+	colIdx := geoparquet.GetBboxColumnIndex(reader.MetaData().Schema, metadata)
+	assert.Equal(t, 6, colIdx)
+	assert.Equal(t, 6, reader.MetaData().Schema.Root().FieldIndexByName("geometry_bbox"))
+}
+
+func TestFilterByBboxV100(t *testing.T) {
+	fileReader, fileErr := os.Open("../testdata/cases/example-v1.0.0.parquet")
+	require.NoError(t, fileErr)
+	defer fileReader.Close()
+
+	recordReader, err := geoparquet.NewRecordReader(&geoparquet.ReaderConfig{Reader: fileReader})
+	require.NoError(t, err)
+	defer recordReader.Close()
+
+	record, readErr := recordReader.Read()
+	require.NoError(t, readErr)
+	assert.Equal(t, int64(6), record.NumCols())
+	assert.Equal(t, int64(5), record.NumRows())
+
+	inputBbox := &geo.Bbox{Xmin: 34.0, Ymin: -7.0, Xmax: 36.0, Ymax: -6.0}
+
+	filteredRecord, err := geoparquet.FilterRecordBatchByBbox(context.Background(), recordReader, &record, inputBbox)
+	require.NoError(t, err)
+
+	// we expect only one row, namely Tanzania
+	assert.Equal(t, int64(6), (*filteredRecord).NumCols())
+	assert.Equal(t, int64(1), (*filteredRecord).NumRows())
+
+	country := (*filteredRecord).Column(recordReader.Schema().ColumnIndexByName("name")).ValueStr(0)
+	assert.Equal(t, "Tanzania", country)
+}
+
+func TestFilterByBboxV110(t *testing.T) {
+	fileReader, fileErr := os.Open("../testdata/cases/example-v1.1.0.parquet")
+	require.NoError(t, fileErr)
+	defer fileReader.Close()
+
+	recordReader, err := geoparquet.NewRecordReader(&geoparquet.ReaderConfig{Reader: fileReader})
+	require.NoError(t, err)
+	defer recordReader.Close()
+
+	record, readErr := recordReader.Read()
+	require.NoError(t, readErr)
+	assert.Equal(t, int64(7), record.NumCols())
+	assert.Equal(t, int64(5), record.NumRows())
+
+	inputBbox := &geo.Bbox{Xmin: 34.0, Ymin: -7.0, Xmax: 36.0, Ymax: -6.0}
+
+	filteredRecord, err := geoparquet.FilterRecordBatchByBbox(context.Background(), recordReader, &record, inputBbox)
+	require.NoError(t, err)
+
+	// we expect only one row, namely Tanzania
+	assert.Equal(t, int64(7), (*filteredRecord).NumCols())
+	assert.Equal(t, int64(1), (*filteredRecord).NumRows())
+
+	country := (*filteredRecord).Column(recordReader.Schema().ColumnIndexByName("name")).ValueStr(0)
+	assert.Equal(t, "Tanzania", country)
+}
+
+func TestFilterByBboxV110NonStandardBboxCol(t *testing.T) {
+	fileReader, fileErr := os.Open("../testdata/cases/example-v1.1.0-covering.parquet")
+	require.NoError(t, fileErr)
+	defer fileReader.Close()
+
+	recordReader, err := geoparquet.NewRecordReader(&geoparquet.ReaderConfig{Reader: fileReader})
+	require.NoError(t, err)
+	defer recordReader.Close()
+
+	record, readErr := recordReader.Read()
+	require.NoError(t, readErr)
+	assert.Equal(t, int64(7), record.NumCols())
+	assert.Equal(t, int64(5), record.NumRows())
+
+	inputBbox := &geo.Bbox{Xmin: 34.0, Ymin: -7.0, Xmax: 36.0, Ymax: -6.0}
+
+	filteredRecord, err := geoparquet.FilterRecordBatchByBbox(context.Background(), recordReader, &record, inputBbox)
+	require.NoError(t, err)
+
+	// we expect only one row, namely Tanzania
+	assert.Equal(t, int64(7), (*filteredRecord).NumCols())
+	assert.Equal(t, int64(1), (*filteredRecord).NumRows())
+
+	country := (*filteredRecord).Column(recordReader.Schema().ColumnIndexByName("name")).ValueStr(0)
+	assert.Equal(t, "Tanzania", country)
 }
