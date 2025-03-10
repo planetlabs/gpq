@@ -231,7 +231,7 @@ func FilterRecordBatchByBbox(ctx context.Context, recordReader *RecordReader, re
 		var ymaxName string
 
 		// loop over individual bbox values per record
-		for idx := range col.Len() {
+		for idx := 0; idx < col.Len(); idx++ {
 			var bbox map[string]json.RawMessage
 			if err := json.Unmarshal([]byte(col.ValueStr(idx)), &bbox); err != nil {
 				return nil, fmt.Errorf("trouble unmarshalling bbox struct: %w", err)
@@ -308,7 +308,7 @@ func FilterRecordBatchByBbox(ctx context.Context, recordReader *RecordReader, re
 		maskBuilder := array.NewBooleanBuilder(memory.DefaultAllocator)
 		defer maskBuilder.Release()
 
-		for idx := range col.Len() {
+		for idx := 0; idx < col.Len(); idx++ {
 			value := col.GetOneForMarshal(idx)
 			g, decodeErr := geo.DecodeGeometry(value, metadata.Columns[metadata.PrimaryColumn].Encoding)
 			if decodeErr != nil {
