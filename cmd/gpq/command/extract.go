@@ -78,7 +78,7 @@ func (c *ExtractCmd) Run() error {
 	// parse bbox filter argument into geo.Bbox struct if applicable
 	inputBbox, err := geo.NewBboxFromString(c.Bbox)
 	if err != nil {
-		return NewCommandError(err.Error())
+		return NewCommandError("trouble getting bbox from input string: %w", err)
 	}
 
 	// read and write records in loop
@@ -93,7 +93,7 @@ func (c *ExtractCmd) Run() error {
 
 		filteredRecord, err := geoparquet.FilterRecordBatchByBbox(context.Background(), recordReader, &record, inputBbox)
 		if err != nil {
-			return NewCommandError(err.Error())
+			return NewCommandError("trouble filtering record batch: %w", err)
 		}
 
 		if err := recordWriter.Write(*filteredRecord); err != nil {
