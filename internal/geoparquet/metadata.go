@@ -79,6 +79,17 @@ func (p *Proj) String() string {
 	return id
 }
 
+type coveringBbox struct {
+	Xmin []string
+	Ymin []string
+	Xmax []string
+	Ymax []string
+}
+
+type Covering struct {
+	Bbox coveringBbox
+}
+
 type GeometryColumn struct {
 	Encoding      string    `json:"encoding"`
 	GeometryType  any       `json:"geometry_type,omitempty"`
@@ -88,6 +99,7 @@ type GeometryColumn struct {
 	Orientation   string    `json:"orientation,omitempty"`
 	Bounds        []float64 `json:"bbox,omitempty"`
 	Epoch         float64   `json:"epoch,omitempty"`
+	Covering      *Covering `json:"covering,omitempty"`
 }
 
 func (g *GeometryColumn) clone() *GeometryColumn {
