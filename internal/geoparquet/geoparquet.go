@@ -225,10 +225,24 @@ func FilterRecordBatchByBbox(ctx context.Context, recordReader *RecordReader, re
 		maskBuilder := array.NewBooleanBuilder(memory.DefaultAllocator)
 		defer maskBuilder.Release()
 
+		// infer bbox struct field names
 		var xminName string
 		var yminName string
 		var xmaxName string
 		var ymaxName string
+
+		if metadata.Columns[metadata.PrimaryColumn].Covering != nil {
+			xminName = metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Xmin[1]
+			yminName = metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Ymin[1]
+			xmaxName = metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Xmax[1]
+			ymaxName = metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Ymax[1]
+		} else {
+			// fallback to standard names
+			xminName = "xmin"
+			yminName = "ymin"
+			xmaxName = "xmax"
+			ymaxName = "ymax"
+		}
 
 		// loop over individual bbox values per record
 		for idx := 0; idx < col.Len(); idx++ {
@@ -237,43 +251,7 @@ func FilterRecordBatchByBbox(ctx context.Context, recordReader *RecordReader, re
 				return nil, fmt.Errorf("trouble unmarshalling bbox struct: %w", err)
 			}
 
-			// infer bbox field names from the first element
-			if idx == 0 {
-				// check standard name first, if no match, check covering metadata
-				if _, ok := bbox["xmin"]; ok {
-					xminName = "xmin"
-				} else if metadata.Columns[metadata.PrimaryColumn].Covering != nil {
-					xminName = "xmin" // DEBUG metadata.Columns[metadata.PrimaryColumn].Covering.Xmin[1]
-				} else {
-					return nil, fmt.Errorf("can not infer bbox field name for 'xmin'")
-				}
-
-				if _, ok := bbox["ymin"]; ok {
-					yminName = "ymin"
-				} else if metadata.Columns[metadata.PrimaryColumn].Covering != nil {
-					yminName = metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Ymin[1]
-				} else {
-					return nil, fmt.Errorf("can not infer bbox field name for 'ymin'")
-				}
-
-				if _, ok := bbox["xmax"]; ok { // check standard name first
-					xmaxName = "xmax"
-				} else if metadata.Columns[metadata.PrimaryColumn].Covering != nil {
-					xmaxName = metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Xmax[1]
-				} else {
-					return nil, fmt.Errorf("can not infer bbox field name for 'xmax'")
-				}
-
-				if _, ok := bbox["ymax"]; ok {
-					ymaxName = "ymax"
-				} else if metadata.Columns[metadata.PrimaryColumn].Covering != nil {
-					ymaxName = metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Ymax[1]
-				} else {
-					return nil, fmt.Errorf("can not infer bbox field name for 'ymax'")
-				}
-			}
-
-			bboxValue := &geo.Bbox{} // create empty struct to hold bbox values of this record
+			bboxValue := &geo.Bbox{} // create empty struct to hold bbox values of this row
 
 			if err := json.Unmarshal(bbox[xminName], &bboxValue.Xmin); err != nil {
 				return nil, fmt.Errorf("trouble parsing bbox.%v field: %w", xminName, err)
