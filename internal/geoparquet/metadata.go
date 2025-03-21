@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/apache/arrow/go/v16/parquet/file"
 	"github.com/apache/arrow/go/v16/parquet/metadata"
 	"github.com/planetlabs/gpq/internal/geo"
 )
@@ -191,4 +192,8 @@ func GetMetadataValue(keyValueMetadata metadata.KeyValueMetadata) (string, error
 		return "", ErrNoMetadata
 	}
 	return *value, nil
+}
+
+func GetMetadataFromFileReader(fileReader *file.Reader) (*Metadata, error) {
+	return GetMetadata(fileReader.MetaData().GetKeyValueMetadata())
 }

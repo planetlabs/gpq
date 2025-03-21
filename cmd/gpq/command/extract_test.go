@@ -26,7 +26,7 @@ func (s *Suite) TestExtractDropCols() {
 	s.Require().NoError(err)
 	s.Equal(4, fileReader.MetaData().Schema.NumColumns())
 
-	recordReader, err := geoparquet.NewRecordReader(&geoparquet.ReaderConfig{
+	recordReader, err := geoparquet.NewRecordReaderFromConfig(&geoparquet.ReaderConfig{
 		Reader: bytes.NewReader(data),
 	})
 	s.Require().NoError(err)
@@ -55,7 +55,7 @@ func (s *Suite) TestExtractKeepOnlyCols() {
 	s.Require().NoError(err)
 	s.Equal(3, fileReader.MetaData().Schema.NumColumns())
 
-	recordReader, err := geoparquet.NewRecordReader(&geoparquet.ReaderConfig{
+	recordReader, err := geoparquet.NewRecordReaderFromConfig(&geoparquet.ReaderConfig{
 		Reader: bytes.NewReader(data),
 	})
 	s.Require().NoError(err)
@@ -76,7 +76,7 @@ func (s *Suite) TestExtractBbox110() {
 
 	data := s.readStdout()
 
-	recordReader, err := geoparquet.NewRecordReader(&geoparquet.ReaderConfig{
+	recordReader, err := geoparquet.NewRecordReaderFromConfig(&geoparquet.ReaderConfig{
 		Reader: bytes.NewReader(data),
 	})
 	s.Require().NoError(err)
@@ -94,6 +94,35 @@ func (s *Suite) TestExtractBbox110() {
 	s.Assert().Equal("Tanzania", country)
 }
 
+// Since the 1.1.0 parquet file includes a bbox column and is partitioned into spatially ordered row groups,
+// we expect the bbox column row group statistic to be used for spatial pushdown filtering.
+func (s *Suite) TestExtractBbox110Partitioned() {
+	cmd := &command.ExtractCmd{
+		Input: "../../../internal/testdata/cases/example-v1.1.0-partitioned.parquet",
+		Bbox:  "34,-7,36,-6",
+	}
+	s.Require().NoError(cmd.Run())
+
+	data := s.readStdout()
+
+	recordReader, err := geoparquet.NewRecordReaderFromConfig(&geoparquet.ReaderConfig{
+		Reader: bytes.NewReader(data),
+	})
+	s.Require().NoError(err)
+	defer recordReader.Close()
+
+	// we expect only one row, namely Tanzania
+	s.Require().Equal(int64(1), recordReader.NumRows())
+
+	record, readErr := recordReader.Read()
+	s.Require().NoError(readErr)
+	s.Assert().Equal(int64(8), record.NumCols())
+	s.Assert().Equal(int64(1), record.NumRows())
+
+	country := record.Column(recordReader.Schema().ColumnIndexByName("name")).ValueStr(0)
+	s.Assert().Equal("Tanzania", country)
+}
+
 // Since the 1.0.0 parquet file doesn't have a bbox column, we expect the bbox column to be calculated on the fly.
 func (s *Suite) TestExtractBbox100() {
 	cmd := &command.ExtractCmd{
@@ -104,7 +133,7 @@ func (s *Suite) TestExtractBbox100() {
 
 	data := s.readStdout()
 
-	recordReader, err := geoparquet.NewRecordReader(&geoparquet.ReaderConfig{
+	recordReader, err := geoparquet.NewRecordReaderFromConfig(&geoparquet.ReaderConfig{
 		Reader: bytes.NewReader(data),
 	})
 	s.Require().NoError(err)

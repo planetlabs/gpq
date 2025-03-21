@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/apache/arrow/go/v16/arrow"
 	"github.com/planetlabs/gpq/internal/geo"
 	"github.com/planetlabs/gpq/internal/geoparquet"
 )
@@ -49,18 +50,93 @@ func (c *ExtractCmd) Run() error {
 
 	// prepare input reader (ignore certain columns if asked to - DropCols/KeepOnlyCols)
 	config := &geoparquet.ReaderConfig{Reader: input}
-	if c.DropCols != "" {
-		cols := strings.Split(c.DropCols, ",")
-		config.ExcludeColNames = cols
-	}
-	if c.KeepOnlyCols != "" {
-		cols := strings.Split(c.KeepOnlyCols, ",")
-		config.IncludeColNames = cols
+
+	parquetFileReader, err := geoparquet.NewParquetFileReader(config)
+	if err != nil {
+		return NewCommandError("could not get ParquetFileReader: %w", err)
 	}
 
-	recordReader, rrErr := geoparquet.NewRecordReader(config)
-	if rrErr != nil {
-		return NewCommandError("trouble reading geoparquet: %w", rrErr)
+	arrowFileReader, err := geoparquet.NewArrowFileReader(config, parquetFileReader)
+	if err != nil {
+		return NewCommandError("could not get ArrowFileReader: %w", err)
+	}
+
+	geoMetadata, err := geoparquet.GetMetadataFromFileReader(parquetFileReader)
+	if err != nil {
+		return NewCommandError("could not get geo metadata from file reader: %w", err)
+	}
+
+	arrowSchema, schemaErr := arrowFileReader.Schema()
+	if schemaErr != nil {
+		return NewCommandError("trouble getting arrow schema: %w", schemaErr)
+	}
+
+	// projection pushdown - column filtering
+	var columnIndices []int = nil
+
+	var includeColumns []string
+	var excludeColumns []string
+	if c.DropCols != "" {
+		excludeColumns = strings.Split(c.DropCols, ",")
+	}
+	if c.KeepOnlyCols != "" {
+		includeColumns = strings.Split(c.KeepOnlyCols, ",")
+	}
+
+	excludeColNamesProvided := len(excludeColumns) > 0
+	includeColNamesProvided := len(includeColumns) > 0
+
+	if excludeColNamesProvided || includeColNamesProvided {
+		if excludeColNamesProvided == includeColNamesProvided {
+			return NewCommandError("please pass only one of DropColumns/KeepOnlyColumns")
+		}
+
+		if includeColNamesProvided {
+			columnIndices, err = geoparquet.GetColumnIndices(includeColumns, arrowSchema)
+			if err != nil {
+				return NewCommandError("trouble inferring column names (positive selection): %w", err)
+			}
+		}
+
+		if excludeColNamesProvided {
+			columnIndices, err = geoparquet.GetColumnIndicesByDifference(excludeColumns, arrowSchema)
+			if err != nil {
+				return NewCommandError("trouble inferring column names (negative selection): %w", err)
+			}
+		}
+	}
+	config.Columns = columnIndices
+
+	// predicate pushdown - spatial row filtering
+	var rowGroups []int = nil
+
+	// parse bbox filter argument into geo.Bbox struct if applicable
+	inputBbox, err := geo.NewBboxFromString(c.Bbox)
+	if err != nil {
+		return NewCommandError("trouble getting bbox from input string: %w", err)
+	}
+	var bboxCol *geoparquet.BboxColumn
+	if inputBbox != nil {
+		bboxCol = geoparquet.GetBboxColumn(parquetFileReader.MetaData().Schema, geoMetadata)
+
+		if bboxCol.Name != "" { // if there is a bbox col in the file
+			rowGroups, err = geoparquet.GetRowGroupsByBbox(parquetFileReader, bboxCol, inputBbox)
+			if err != nil {
+				return NewCommandError("trouble scanning row group metadata: %w", err)
+			}
+		}
+	}
+
+	config.RowGroups = rowGroups
+
+	// create new record reader - based on the config values for
+	// Columns and RowGroups it will only read a subset of
+	// columns and row groups
+	ctx := context.Background()
+
+	recordReader, err := geoparquet.NewRecordReader(ctx, arrowFileReader, geoMetadata, columnIndices, rowGroups)
+	if err != nil {
+		return NewCommandError("trouble creating geoparquet record reader: %w", err)
 	}
 	defer recordReader.Close()
 
@@ -75,12 +151,6 @@ func (c *ExtractCmd) Run() error {
 	}
 	defer recordWriter.Close()
 
-	// parse bbox filter argument into geo.Bbox struct if applicable
-	inputBbox, err := geo.NewBboxFromString(c.Bbox)
-	if err != nil {
-		return NewCommandError("trouble getting bbox from input string: %w", err)
-	}
-
 	// read and write records in loop
 	for {
 		record, readErr := recordReader.Read()
@@ -91,9 +161,16 @@ func (c *ExtractCmd) Run() error {
 			return readErr
 		}
 
-		filteredRecord, err := geoparquet.FilterRecordBatchByBbox(context.Background(), recordReader, &record, inputBbox)
-		if err != nil {
-			return NewCommandError("trouble filtering record batch: %w", err)
+		// filter by bbox if asked to
+		var filteredRecord *arrow.Record
+		if inputBbox != nil && bboxCol != nil {
+			var filterErr error
+			filteredRecord, filterErr = geoparquet.FilterRecordBatchByBbox(ctx, &record, inputBbox, bboxCol)
+			if filterErr != nil {
+				return NewCommandError("trouble filtering record batch by bbox: %w", filterErr)
+			}
+		} else {
+			filteredRecord = &record
 		}
 
 		if err := recordWriter.Write(*filteredRecord); err != nil {

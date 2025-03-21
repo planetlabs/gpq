@@ -26,7 +26,7 @@ func GetDefaultMetadata() *geoparquet.Metadata {
 }
 
 func FromParquet(reader parquet.ReaderAtSeeker, writer io.Writer) error {
-	recordReader, rrErr := geoparquet.NewRecordReader(&geoparquet.ReaderConfig{
+	recordReader, rrErr := geoparquet.NewRecordReaderFromConfig(&geoparquet.ReaderConfig{
 		Reader: reader,
 	})
 	if rrErr != nil {
