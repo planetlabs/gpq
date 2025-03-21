@@ -104,20 +104,39 @@ func GetColumnIndicesByDifference(excludeColumns []string, arrowSchema *arrow.Sc
 
 // PREDICATE PUSHDOWN - ROW FILTERING UTILS
 
+type rowGroupIntersectionResult struct {
+	Index      int
+	Intersects bool
+	Error      error
+}
+
 // Get row group indices that intersect with the input bbox. Uses the bbox column row group
 // stats to calculate intersection.
 func GetRowGroupsByBbox(fileReader *file.Reader, bboxCol *BboxColumn, inputBbox *geo.Bbox) ([]int, error) {
 	numRowGroups := fileReader.NumRowGroups()
 	intersectingRowGroups := make([]int, 0, numRowGroups)
+
+	// process row groups concurrently
+	queue := make(chan *rowGroupIntersectionResult)
 	for i := 0; i < numRowGroups; i += 1 {
-		intersects, err := RowGroupIntersects(fileReader.MetaData(), bboxCol, i, inputBbox)
-		if err != nil {
-			return nil, err
+		go func(i int) {
+			result := &rowGroupIntersectionResult{Index: i}
+			result.Intersects, result.Error = RowGroupIntersects(fileReader.MetaData(), bboxCol, i, inputBbox)
+			queue <- result
+		}(i)
+	}
+
+	// read goroutine results
+	for i := 0; i < numRowGroups; i += 1 {
+		res := <-queue
+		if res.Error != nil {
+			return intersectingRowGroups, res.Error
 		}
-		if intersects {
-			intersectingRowGroups = append(intersectingRowGroups, i)
+		if res.Intersects {
+			intersectingRowGroups = append(intersectingRowGroups, res.Index)
 		}
 	}
+	slices.Sort(intersectingRowGroups)
 	return intersectingRowGroups, nil
 }
 
@@ -162,7 +181,7 @@ func GetColumnMinMax(fileMetadata *metadata.FileMetaData, rowGroup int, columnPa
 // Check whether the bbox features in a row group intersect with the input bbox, based on the row group min/max stats.
 func RowGroupIntersects(fileMetadata *metadata.FileMetaData, bboxCol *BboxColumn, rowGroup int, inputBbox *geo.Bbox) (bool, error) {
 	if bboxCol.Name == "" {
-		return false, errors.New("bboxCol.Name is empty")
+		return false, errors.New("name field of bbox column struct is empty")
 	}
 	xminPath := fmt.Sprintf("%v.%v", bboxCol.Name, bboxCol.Xmin)
 	xmin, _, err := GetColumnMinMax(fileMetadata, rowGroup, xminPath)

@@ -22,7 +22,7 @@ func TestBboxIntersectsTrue(t *testing.T) {
 		Ymax: 55,
 	}
 
-	require.Equal(t, box1.Intersects(box2), true)
+	require.Equal(t, true, box1.Intersects(box2))
 }
 
 func TestBboxIntersectsFalse(t *testing.T) {
@@ -40,7 +40,7 @@ func TestBboxIntersectsFalse(t *testing.T) {
 		Ymax: 70,
 	}
 
-	require.Equal(t, box1.Intersects(box2), false)
+	require.Equal(t, false, box1.Intersects(box2))
 }
 
 func TestBboxIntersectsTouches(t *testing.T) {
@@ -58,7 +58,25 @@ func TestBboxIntersectsTouches(t *testing.T) {
 		Ymax: 40,
 	}
 
-	require.Equal(t, box1.Intersects(box2), true)
+	require.Equal(t, true, box1.Intersects(box2))
+}
+
+func TestBboxIntersectsWholeGlobe(t *testing.T) {
+	box1 := &Bbox{
+		Xmin: -180,
+		Ymin: -90,
+		Xmax: 180,
+		Ymax: 90,
+	}
+
+	box2 := &Bbox{
+		Xmin: 10,
+		Ymin: 10,
+		Xmax: 30,
+		Ymax: 30,
+	}
+
+	require.Equal(t, true, box1.Intersects(box2))
 }
 
 func TestBboxIntersectsContains(t *testing.T) {
@@ -76,7 +94,7 @@ func TestBboxIntersectsContains(t *testing.T) {
 		Ymax: 40,
 	}
 
-	require.Equal(t, box1.Intersects(box2), true)
+	require.Equal(t, true, box1.Intersects(box2))
 }
 
 func TestBboxIntersectsTrueAntimeridian(t *testing.T) {
@@ -94,7 +112,7 @@ func TestBboxIntersectsTrueAntimeridian(t *testing.T) {
 		Ymax: 15,
 	}
 
-	require.Equal(t, box1.Intersects(box2), true)
+	require.Equal(t, true, box1.Intersects(box2))
 }
 
 func TestBboxIntersectsFalseAntimeridian(t *testing.T) {
@@ -112,7 +130,7 @@ func TestBboxIntersectsFalseAntimeridian(t *testing.T) {
 		Ymax: 15,
 	}
 
-	require.Equal(t, box1.Intersects(box2), false)
+	require.Equal(t, false, box1.Intersects(box2))
 }
 
 func TestNewBboxFromString(t *testing.T) {

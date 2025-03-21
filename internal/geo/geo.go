@@ -352,18 +352,15 @@ func (box1 *Bbox) Intersects(box2 *Bbox) bool {
 		return false
 	}
 
-	// shift all negative x coordinates to accomodate antimeridian crossings
-	if box1.Xmin < 0 {
-		box1.Xmin += 360
+	// if box1 crosses the antimeridian and uses the coordinate range -180/180,
+	// represent e.g. xmin 170 as -190
+	if box1.Xmin > 0 && box1.Xmax < 0 {
+		box1.Xmin = -180 - (180 - box1.Xmin)
 	}
-	if box1.Xmax < 0 {
-		box1.Xmax += 360
-	}
-	if box2.Xmin < 0 {
-		box2.Xmin += 360
-	}
-	if box2.Xmax < 0 {
-		box2.Xmax += 360
+
+	// see above
+	if box2.Xmin > 0 && box2.Xmax < 0 {
+		box2.Xmin = -180 - (180 - box2.Xmin)
 	}
 
 	// check longitude overlap
