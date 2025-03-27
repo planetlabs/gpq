@@ -36,6 +36,7 @@ type Feature struct {
 	Id         any            `json:"id,omitempty"`
 	Type       string         `json:"type"`
 	Geometry   orb.Geometry   `json:"geometry"`
+	Bbox       *orb.Bound     `json:"bbox,omitempty"`
 	Properties map[string]any `json:"properties"`
 }
 
@@ -53,12 +54,16 @@ func (f *Feature) MarshalJSON() ([]byte, error) {
 	if f.Id != nil {
 		m["id"] = f.Id
 	}
+	if f.Bbox != nil {
+		m["bbox"] = f.Bbox
+	}
 	return json.Marshal(m)
 }
 
 type jsonFeature struct {
 	Id         any             `json:"id,omitempty"`
 	Type       string          `json:"type"`
+	Bbox       *orbjson.BBox   `json:"bbox,omitempty"`
 	Geometry   json.RawMessage `json:"geometry"`
 	Properties map[string]any  `json:"properties"`
 }
@@ -96,6 +101,14 @@ func (f *Feature) UnmarshalJSON(data []byte) error {
 	}
 
 	f.Geometry = geometry.Geometry()
+
+	if jf.Bbox != nil {
+		if !jf.Bbox.Valid() {
+			return errors.New("invalid bbox, make sure it is an array of at least 4 floats")
+		}
+		bound := jf.Bbox.Bound()
+		f.Bbox = &bound
+	}
 	return nil
 }
 
@@ -338,11 +351,13 @@ func (i *DatasetStats) Types(name string) []string {
 	return collection.Types()
 }
 
+// BBOX type
+
 type Bbox struct {
-	Xmin float64
-	Ymin float64
-	Xmax float64
-	Ymax float64
+	Xmin float64 `parquet:"name=xmin" json:"xmin"`
+	Ymin float64 `parquet:"name=ymin" json:"ymin"`
+	Xmax float64 `parquet:"name=xmax" json:"xmax"`
+	Ymax float64 `parquet:"name=ymax" json:"ymax"`
 }
 
 // Checks whether the bbox overlaps with another axis-aligned bbox.

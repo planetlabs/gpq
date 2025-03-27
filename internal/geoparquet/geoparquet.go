@@ -197,7 +197,7 @@ type BboxColumnFieldNames struct {
 	Ymax string
 }
 
-func getBboxColumnFieldNames(metadata *Metadata) *BboxColumnFieldNames {
+func GetBboxColumnFieldNames(metadata *Metadata) *BboxColumnFieldNames {
 	// infer bbox struct field names
 	fieldNames := &BboxColumnFieldNames{}
 
@@ -225,6 +225,16 @@ type BboxColumn struct {
 	BboxColumnFieldNames
 }
 
+// Get Bbox column name from covering metadata only. For most cases, use the
+// more robust function GetBboxColumn that infers the name even if metadata
+// is not present.
+func GetBboxColumnNameFromMetadata(geoMetadata *Metadata) string {
+	if geoMetadata.Columns[geoMetadata.PrimaryColumn].Covering != nil && len(geoMetadata.Columns[geoMetadata.PrimaryColumn].Covering.Bbox.Xmin) == 2 {
+		return geoMetadata.Columns[geoMetadata.PrimaryColumn].Covering.Bbox.Xmin[0]
+	}
+	return ""
+}
+
 // Returns a *BboxColumn struct that contains index, name and other data
 // that describe the bounding box column contained in the schema.
 // If there is no match for the standard name "bbox" in the schema,
@@ -233,8 +243,8 @@ type BboxColumn struct {
 func GetBboxColumn(schema *schema.Schema, geoMetadata *Metadata) *BboxColumn {
 	bboxCol := &BboxColumn{}
 	// try standard name first
-	bboxCol.Name = "bbox"
-	bboxCol.Index = schema.Root().FieldIndexByName("bbox")
+	bboxCol.Name = DefaultBboxColumn
+	bboxCol.Index = schema.Root().FieldIndexByName(DefaultBboxColumn)
 
 	// if no match, check covering metadata
 	if bboxCol.Index == -1 {
@@ -247,6 +257,6 @@ func GetBboxColumn(schema *schema.Schema, geoMetadata *Metadata) *BboxColumn {
 	}
 
 	bboxCol.BaseColumn = schema.ColumnIndexByName(geoMetadata.PrimaryColumn)
-	bboxCol.BboxColumnFieldNames = *getBboxColumnFieldNames(geoMetadata)
+	bboxCol.BboxColumnFieldNames = *GetBboxColumnFieldNames(geoMetadata)
 	return bboxCol
 }

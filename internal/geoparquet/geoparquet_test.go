@@ -277,7 +277,7 @@ func TestFromParquetWithoutDefaultGeometryColumn(t *testing.T) {
 }
 
 func TestMetadataClone(t *testing.T) {
-	metadata := geoparquet.DefaultMetadata()
+	metadata := geoparquet.DefaultMetadata(false)
 	clone := metadata.Clone()
 
 	assert.Equal(t, metadata.PrimaryColumn, clone.PrimaryColumn)

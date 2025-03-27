@@ -10,12 +10,13 @@ import (
 )
 
 const (
-	Version                     = "1.0.0"
+	Version                     = "1.1.0"
 	MetadataKey                 = "geo"
 	EdgesPlanar                 = "planar"
 	EdgesSpherical              = "spherical"
 	OrientationCounterClockwise = "counterclockwise"
 	DefaultGeometryColumn       = "geometry"
+	DefaultBboxColumn           = "bbox"
 	DefaultGeometryEncoding     = geo.EncodingWKB
 )
 
@@ -152,14 +153,23 @@ func getDefaultGeometryColumn() *GeometryColumn {
 	}
 }
 
-func DefaultMetadata() *Metadata {
-	return &Metadata{
+func DefaultMetadata(writeCovering bool) *Metadata {
+	metadata := &Metadata{
 		Version:       Version,
 		PrimaryColumn: DefaultGeometryColumn,
 		Columns: map[string]*GeometryColumn{
 			DefaultGeometryColumn: getDefaultGeometryColumn(),
 		},
 	}
+	if writeCovering {
+		metadata.Columns[metadata.PrimaryColumn].Covering = &Covering{Bbox: coveringBbox{
+			Xmin: []string{"bbox", "xmin"},
+			Ymin: []string{"bbox", "ymin"},
+			Xmax: []string{"bbox", "xmax"},
+			Ymax: []string{"bbox", "ymax"},
+		}}
+	}
+	return metadata
 }
 
 var ErrNoMetadata = fmt.Errorf("missing %s metadata key", MetadataKey)

@@ -35,6 +35,7 @@ type ConvertCmd struct {
 	InputPrimaryColumn string `help:"Primary geometry column name when reading Parquet without metadata." default:"geometry"`
 	Compression        string `help:"Parquet compression to use.  Possible values: ${enum}." enum:"uncompressed, snappy, gzip, brotli, zstd" default:"zstd"`
 	RowGroupLength     int    `help:"Maximum number of rows per group when writing Parquet."`
+	AddBbox            bool   `help:"Compute the bounding box of features where not yet available and write to Parquet output."`
 }
 
 type FormatType string
@@ -157,6 +158,7 @@ func (c *ConvertCmd) Run() error {
 			MaxFeatures:    c.Max,
 			Compression:    c.Compression,
 			RowGroupLength: c.RowGroupLength,
+			AddBbox:        c.AddBbox,
 		}
 		if err := geojson.ToParquet(input, output, convertOptions); err != nil {
 			return NewCommandError("%w", err)

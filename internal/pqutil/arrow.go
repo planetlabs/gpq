@@ -39,6 +39,17 @@ func (b *ArrowSchemaBuilder) AddGeometry(name string, encoding string) error {
 	return nil
 }
 
+func (b *ArrowSchemaBuilder) AddBbox(name string) {
+	bboxFields := []arrow.Field{
+		{Name: "xmin", Type: arrow.PrimitiveTypes.Float64, Nullable: false},
+		{Name: "ymin", Type: arrow.PrimitiveTypes.Float64, Nullable: false},
+		{Name: "xmax", Type: arrow.PrimitiveTypes.Float64, Nullable: false},
+		{Name: "ymax", Type: arrow.PrimitiveTypes.Float64, Nullable: false},
+	}
+	dataType := arrow.StructOf(bboxFields...)
+	b.fields[name] = &arrow.Field{Name: name, Type: dataType, Nullable: true}
+}
+
 func (b *ArrowSchemaBuilder) Add(record map[string]any) error {
 	for name, value := range record {
 		if b.fields[name] != nil {

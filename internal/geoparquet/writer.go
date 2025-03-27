@@ -9,9 +9,10 @@ import (
 )
 
 type WriterConfig struct {
-	Writer             io.Writer
-	Metadata           *Metadata
-	ParquetWriterProps *parquet.WriterProperties
-	ArrowWriterProps   *pqarrow.ArrowWriterProperties
-	ArrowSchema        *arrow.Schema
+	Writer                io.Writer
+	Metadata              *Metadata
+	ParquetWriterProps    *parquet.WriterProperties
+	ArrowWriterProps      *pqarrow.ArrowWriterProperties
+	ArrowSchema           *arrow.Schema
+	WriteCoveringMetadata bool
 }
