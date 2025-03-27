@@ -35,7 +35,7 @@ type ConvertCmd struct {
 	InputPrimaryColumn string `help:"Primary geometry column name when reading Parquet without metadata." default:"geometry"`
 	Compression        string `help:"Parquet compression to use.  Possible values: ${enum}." enum:"uncompressed, snappy, gzip, brotli, zstd" default:"zstd"`
 	RowGroupLength     int    `help:"Maximum number of rows per group when writing Parquet."`
-	AddBbox            bool   `help:"Compute the bounding box of features where not yet available and write to Parquet output."`
+	AddBbox            bool   `help:"Compute the bounding box of features where not present in GeoJSON input and write to Parquet output."`
 }
 
 type FormatType string
@@ -147,6 +147,10 @@ func (c *ConvertCmd) Run() error {
 		}
 		defer o.Close()
 		output = o
+	}
+
+	if c.AddBbox && outputFormat != GeoParquetType {
+		return NewCommandError("--add-bbox is only available when converting to GeoParquet.")
 	}
 
 	if inputFormat == GeoJSONType {
