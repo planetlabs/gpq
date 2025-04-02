@@ -10,23 +10,8 @@ import (
 	"github.com/planetlabs/gpq/internal/pqutil"
 )
 
-const primaryColumn = "geometry"
-
-func GetDefaultMetadata() *geoparquet.Metadata {
-	return &geoparquet.Metadata{
-		Version:       geoparquet.Version,
-		PrimaryColumn: primaryColumn,
-		Columns: map[string]*geoparquet.GeometryColumn{
-			primaryColumn: {
-				Encoding:      "WKB",
-				GeometryTypes: []string{},
-			},
-		},
-	}
-}
-
 func FromParquet(reader parquet.ReaderAtSeeker, writer io.Writer) error {
-	recordReader, rrErr := geoparquet.NewRecordReader(&geoparquet.ReaderConfig{
+	recordReader, rrErr := geoparquet.NewRecordReaderFromConfig(&geoparquet.ReaderConfig{
 		Reader: reader,
 	})
 	if rrErr != nil {
@@ -63,6 +48,7 @@ type ConvertOptions struct {
 	Compression    string
 	RowGroupLength int
 	Metadata       string
+	AddBbox        bool
 }
 
 var defaultOptions = &ConvertOptions{
@@ -96,6 +82,8 @@ func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions
 		pqWriterProps = parquet.NewWriterProperties(writerOptions...)
 	}
 
+	writeCoveringMetadata := convertOptions.AddBbox
+
 	var featureWriter *geoparquet.FeatureWriter
 	writeBuffered := func() error {
 		if !builder.Ready() {
@@ -109,9 +97,10 @@ func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions
 			return scErr
 		}
 		fw, fwErr := geoparquet.NewFeatureWriter(&geoparquet.WriterConfig{
-			Writer:             output,
-			ArrowSchema:        sc,
-			ParquetWriterProps: pqWriterProps,
+			Writer:                output,
+			ArrowSchema:           sc,
+			ParquetWriterProps:    pqWriterProps,
+			WriteCoveringMetadata: writeCoveringMetadata,
 		})
 		if fwErr != nil {
 			return fwErr
@@ -135,9 +124,23 @@ func ToParquet(input io.Reader, output io.Writer, convertOptions *ConvertOptions
 			return err
 		}
 		featuresRead += 1
+
+		if feature.Bbox == nil && convertOptions.AddBbox {
+			bound := feature.Geometry.Bound()
+			feature.Bbox = &bound
+		}
+
+		if feature.Bbox != nil {
+			writeCoveringMetadata = true
+		}
+
 		if featureWriter == nil {
 			if err := builder.Add(feature.Properties); err != nil {
 				return err
+			}
+
+			if feature.Bbox != nil {
+				builder.AddBbox(geoparquet.DefaultBboxColumn)
 			}
 
 			if !builder.Ready() {

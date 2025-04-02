@@ -11,9 +11,10 @@ import (
 )
 
 type RecordWriter struct {
-	fileWriter       *pqarrow.FileWriter
-	metadata         *Metadata
-	wroteGeoMetadata bool
+	fileWriter            *pqarrow.FileWriter
+	metadata              *Metadata
+	wroteGeoMetadata      bool
+	writeCoveringMetadata bool
 }
 
 func NewRecordWriter(config *WriterConfig) (*RecordWriter, error) {
@@ -41,8 +42,9 @@ func NewRecordWriter(config *WriterConfig) (*RecordWriter, error) {
 	}
 
 	writer := &RecordWriter{
-		fileWriter: fileWriter,
-		metadata:   config.Metadata,
+		fileWriter:            fileWriter,
+		metadata:              config.Metadata,
+		writeCoveringMetadata: config.WriteCoveringMetadata,
 	}
 
 	return writer, nil
@@ -66,7 +68,7 @@ func (w *RecordWriter) Close() error {
 	if !w.wroteGeoMetadata {
 		metadata := w.metadata
 		if metadata == nil {
-			metadata = DefaultMetadata()
+			metadata = DefaultMetadata(w.writeCoveringMetadata)
 		}
 		data, err := json.Marshal(metadata)
 		if err != nil {

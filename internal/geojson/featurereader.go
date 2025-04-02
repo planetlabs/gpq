@@ -95,6 +95,24 @@ func (r *FeatureReader) Read() (*geo.Feature, error) {
 			continue
 		}
 
+		if key == "bbox" {
+			if feature == nil {
+				feature = &geo.Feature{}
+			} else if feature.Bbox != nil {
+				return nil, errors.New("found duplicate bbox")
+			}
+			bbox := &orbjson.BBox{}
+			if err := r.decoder.Decode(bbox); err != nil {
+				return nil, fmt.Errorf("trouble parsing bbox: %w", err)
+			}
+			if !bbox.Valid() {
+				return nil, errors.New("invalid bbox, make sure it is an array of at least 4 floats")
+			}
+			bound := bbox.Bound()
+			feature.Bbox = &bound
+			continue
+		}
+
 		if key == "properties" {
 			if feature == nil {
 				feature = &geo.Feature{}

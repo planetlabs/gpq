@@ -2,8 +2,11 @@ package geo
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/paulmach/orb"
@@ -33,6 +36,7 @@ type Feature struct {
 	Id         any            `json:"id,omitempty"`
 	Type       string         `json:"type"`
 	Geometry   orb.Geometry   `json:"geometry"`
+	Bbox       *orb.Bound     `json:"bbox,omitempty"`
 	Properties map[string]any `json:"properties"`
 }
 
@@ -50,12 +54,16 @@ func (f *Feature) MarshalJSON() ([]byte, error) {
 	if f.Id != nil {
 		m["id"] = f.Id
 	}
+	if f.Bbox != nil {
+		m["bbox"] = f.Bbox
+	}
 	return json.Marshal(m)
 }
 
 type jsonFeature struct {
 	Id         any             `json:"id,omitempty"`
 	Type       string          `json:"type"`
+	Bbox       *orbjson.BBox   `json:"bbox,omitempty"`
 	Geometry   json.RawMessage `json:"geometry"`
 	Properties map[string]any  `json:"properties"`
 }
@@ -93,6 +101,14 @@ func (f *Feature) UnmarshalJSON(data []byte) error {
 	}
 
 	f.Geometry = geometry.Geometry()
+
+	if jf.Bbox != nil {
+		if !jf.Bbox.Valid() {
+			return errors.New("invalid bbox, make sure it is an array of at least 4 floats")
+		}
+		bound := jf.Bbox.Bound()
+		f.Bbox = &bound
+	}
 	return nil
 }
 
@@ -333,4 +349,78 @@ func (i *DatasetStats) Types(name string) []string {
 	collection := i.collections[name]
 	i.readUnlock()
 	return collection.Types()
+}
+
+// BBOX type
+
+type Bbox struct {
+	Xmin float64 `parquet:"name=xmin" json:"xmin"`
+	Ymin float64 `parquet:"name=ymin" json:"ymin"`
+	Xmax float64 `parquet:"name=xmax" json:"xmax"`
+	Ymax float64 `parquet:"name=ymax" json:"ymax"`
+}
+
+// Checks whether the bbox overlaps with another axis-aligned bbox.
+func (box1 *Bbox) Intersects(box2 *Bbox) bool {
+	// check latitude overlap
+	if box1.Ymax < box2.Ymin || box2.Ymax < box1.Ymin {
+		return false
+	}
+
+	// if box1 crosses the antimeridian and uses the coordinate range -180/180,
+	// represent e.g. xmin 170 as -190
+	if box1.Xmin > 0 && box1.Xmax < 0 {
+		box1.Xmin = -180 - (180 - box1.Xmin)
+	}
+
+	// see above
+	if box2.Xmin > 0 && box2.Xmax < 0 {
+		box2.Xmin = -180 - (180 - box2.Xmin)
+	}
+
+	// check longitude overlap
+	if box1.Xmax < box2.Xmin || box2.Xmax < box1.Xmin {
+		return false
+	}
+
+	return true
+}
+
+// Create a new Bbox struct from a string of comma-separated values in format xmin,ymin,xmax,ymax.
+func NewBboxFromString(bounds string) (*Bbox, error) {
+	inputBbox := &Bbox{}
+
+	if bounds != "" {
+		bboxValues := strings.Split(bounds, ",")
+		if len(bboxValues) != 4 {
+			return nil, errors.New("please provide 4 comma-separated values (xmin,ymin,xmax,ymax) as a bbox")
+		}
+
+		xminInput, err := strconv.ParseFloat(bboxValues[0], 64)
+		if err != nil {
+			return nil, fmt.Errorf("trouble parsing xmin input as float64: %w", err)
+		}
+		inputBbox.Xmin = xminInput
+
+		yminInput, err := strconv.ParseFloat(bboxValues[1], 64)
+		if err != nil {
+			return nil, fmt.Errorf("trouble parsing ymin input as float64: %w", err)
+		}
+		inputBbox.Ymin = yminInput
+
+		xmaxInput, err := strconv.ParseFloat(bboxValues[2], 64)
+		if err != nil {
+			return nil, fmt.Errorf("trouble parsing xmax input as float64: %w", err)
+		}
+		inputBbox.Xmax = xmaxInput
+
+		ymaxInput, err := strconv.ParseFloat(bboxValues[3], 64)
+		if err != nil {
+			return nil, fmt.Errorf("trouble parsing ymax input as float64: %w", err)
+		}
+		inputBbox.Ymax = ymaxInput
+	} else {
+		inputBbox = nil
+	}
+	return inputBbox, nil
 }

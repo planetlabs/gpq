@@ -32,9 +32,10 @@ type ConvertCmd struct {
 	To                 string `help:"Output file format.  Possible values: ${enum}." enum:"auto, geojson, geoparquet" default:"auto"`
 	Min                int    `help:"Minimum number of features to consider when building a schema." default:"10"`
 	Max                int    `help:"Maximum number of features to consider when building a schema." default:"100"`
-	InputPrimaryColumn string `help:"Primary geometry column name when reading Parquet withtout metadata." default:"geometry"`
+	InputPrimaryColumn string `help:"Primary geometry column name when reading Parquet without metadata." default:"geometry"`
 	Compression        string `help:"Parquet compression to use.  Possible values: ${enum}." enum:"uncompressed, snappy, gzip, brotli, zstd" default:"zstd"`
 	RowGroupLength     int    `help:"Maximum number of rows per group when writing Parquet."`
+	AddBbox            bool   `help:"Compute the bounding box of features where not present in GeoJSON input and write to Parquet output."`
 }
 
 type FormatType string
@@ -100,14 +101,6 @@ func getFormatType(resource string) FormatType {
 	return UnknownType
 }
 
-func hasStdin() bool {
-	stats, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return stats.Size() > 0
-}
-
 func (c *ConvertCmd) Run() error {
 	inputSource := c.Input
 	outputSource := c.Output
@@ -156,6 +149,10 @@ func (c *ConvertCmd) Run() error {
 		output = o
 	}
 
+	if c.AddBbox && outputFormat != GeoParquetType {
+		return NewCommandError("--add-bbox is only available when converting to GeoParquet.")
+	}
+
 	if inputFormat == GeoJSONType {
 		if outputFormat != ParquetType && outputFormat != GeoParquetType {
 			return NewCommandError("GeoJSON input can only be converted to GeoParquet")
@@ -165,6 +162,7 @@ func (c *ConvertCmd) Run() error {
 			MaxFeatures:    c.Max,
 			Compression:    c.Compression,
 			RowGroupLength: c.RowGroupLength,
+			AddBbox:        c.AddBbox,
 		}
 		if err := geojson.ToParquet(input, output, convertOptions); err != nil {
 			return NewCommandError("%w", err)

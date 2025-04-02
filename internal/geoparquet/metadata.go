@@ -4,17 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/apache/arrow/go/v16/parquet/file"
 	"github.com/apache/arrow/go/v16/parquet/metadata"
 	"github.com/planetlabs/gpq/internal/geo"
 )
 
 const (
-	Version                     = "1.0.0"
+	Version                     = "1.1.0"
 	MetadataKey                 = "geo"
 	EdgesPlanar                 = "planar"
 	EdgesSpherical              = "spherical"
 	OrientationCounterClockwise = "counterclockwise"
 	DefaultGeometryColumn       = "geometry"
+	DefaultBboxColumn           = "bbox"
 	DefaultGeometryEncoding     = geo.EncodingWKB
 )
 
@@ -79,6 +81,17 @@ func (p *Proj) String() string {
 	return id
 }
 
+type coveringBbox struct {
+	Xmin []string
+	Ymin []string
+	Xmax []string
+	Ymax []string
+}
+
+type Covering struct {
+	Bbox coveringBbox
+}
+
 type GeometryColumn struct {
 	Encoding      string    `json:"encoding"`
 	GeometryType  any       `json:"geometry_type,omitempty"`
@@ -88,6 +101,7 @@ type GeometryColumn struct {
 	Orientation   string    `json:"orientation,omitempty"`
 	Bounds        []float64 `json:"bbox,omitempty"`
 	Epoch         float64   `json:"epoch,omitempty"`
+	Covering      *Covering `json:"covering,omitempty"`
 }
 
 func (g *GeometryColumn) clone() *GeometryColumn {
@@ -139,14 +153,23 @@ func getDefaultGeometryColumn() *GeometryColumn {
 	}
 }
 
-func DefaultMetadata() *Metadata {
-	return &Metadata{
+func DefaultMetadata(writeCovering bool) *Metadata {
+	metadata := &Metadata{
 		Version:       Version,
 		PrimaryColumn: DefaultGeometryColumn,
 		Columns: map[string]*GeometryColumn{
 			DefaultGeometryColumn: getDefaultGeometryColumn(),
 		},
 	}
+	if writeCovering {
+		metadata.Columns[metadata.PrimaryColumn].Covering = &Covering{Bbox: coveringBbox{
+			Xmin: []string{"bbox", "xmin"},
+			Ymin: []string{"bbox", "ymin"},
+			Xmax: []string{"bbox", "xmax"},
+			Ymax: []string{"bbox", "ymax"},
+		}}
+	}
+	return metadata
 }
 
 var ErrNoMetadata = fmt.Errorf("missing %s metadata key", MetadataKey)
@@ -179,4 +202,8 @@ func GetMetadataValue(keyValueMetadata metadata.KeyValueMetadata) (string, error
 		return "", ErrNoMetadata
 	}
 	return *value, nil
+}
+
+func GetMetadataFromFileReader(fileReader *file.Reader) (*Metadata, error) {
+	return GetMetadata(fileReader.MetaData().GetKeyValueMetadata())
 }

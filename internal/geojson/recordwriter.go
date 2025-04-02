@@ -2,6 +2,8 @@ package geojson
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 
 	"github.com/apache/arrow/go/v16/arrow"
@@ -51,6 +53,7 @@ func (w *RecordWriter) Write(record arrow.Record) error {
 		}
 
 		var geometry *orbjson.Geometry
+		var bbox *orbjson.BBox
 		properties := map[string]any{}
 		for fieldNum := 0; fieldNum < arr.NumField(); fieldNum += 1 {
 			value := arr.Field(fieldNum).GetOneForMarshal(rowNum)
@@ -67,6 +70,29 @@ func (w *RecordWriter) Write(record arrow.Record) error {
 				properties[name] = g
 				continue
 			}
+
+			bboxCol := geoparquet.GetBboxColumnNameFromMetadata(w.geoMetadata)
+			if value != nil && (name == bboxCol || (bboxCol == "" && name == geoparquet.DefaultBboxColumn)) {
+				bboxMap, ok := value.(map[string]any)
+				if !ok {
+					return errors.New("value is not of type map[string]any")
+				}
+				fieldNames := geoparquet.GetBboxColumnFieldNames(w.geoMetadata)
+				xmin, xminOk := bboxMap[fieldNames.Xmin]
+				ymin, yminOk := bboxMap[fieldNames.Ymin]
+				xmax, xmaxOk := bboxMap[fieldNames.Xmax]
+				ymax, ymaxOk := bboxMap[fieldNames.Ymax]
+				if !(xminOk && yminOk && xmaxOk && ymaxOk) {
+					return fmt.Errorf("bbox struct must have fields %v/%v/%v/%v", fieldNames.Xmin, fieldNames.Ymin, fieldNames.Xmax, fieldNames.Ymax)
+				}
+				if xmin == nil || ymin == nil || xmax == nil || ymax == nil {
+					return errors.New("bbox struct must have non-null values")
+				}
+				orbBbox := orbjson.BBox([]float64{xmin.(float64), ymin.(float64), xmax.(float64), ymax.(float64)})
+				bbox = &orbBbox
+				continue
+			}
+
 			properties[name] = value
 		}
 
@@ -74,6 +100,10 @@ func (w *RecordWriter) Write(record arrow.Record) error {
 			"type":       "Feature",
 			"properties": properties,
 			"geometry":   geometry,
+		}
+
+		if bbox != nil {
+			feature["bbox"] = bbox
 		}
 
 		featureData, jsonErr := json.Marshal(feature)
