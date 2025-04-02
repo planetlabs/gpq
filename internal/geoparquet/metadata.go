@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/apache/arrow/go/v16/parquet/file"
 	"github.com/apache/arrow/go/v16/parquet/metadata"
 	"github.com/planetlabs/gpq/internal/geo"
 )
@@ -79,6 +80,17 @@ func (p *Proj) String() string {
 	return id
 }
 
+type coveringBbox struct {
+	Xmin []string
+	Ymin []string
+	Xmax []string
+	Ymax []string
+}
+
+type Covering struct {
+	Bbox coveringBbox
+}
+
 type GeometryColumn struct {
 	Encoding      string    `json:"encoding"`
 	GeometryType  any       `json:"geometry_type,omitempty"`
@@ -88,6 +100,7 @@ type GeometryColumn struct {
 	Orientation   string    `json:"orientation,omitempty"`
 	Bounds        []float64 `json:"bbox,omitempty"`
 	Epoch         float64   `json:"epoch,omitempty"`
+	Covering      *Covering `json:"covering,omitempty"`
 }
 
 func (g *GeometryColumn) clone() *GeometryColumn {
@@ -179,4 +192,8 @@ func GetMetadataValue(keyValueMetadata metadata.KeyValueMetadata) (string, error
 		return "", ErrNoMetadata
 	}
 	return *value, nil
+}
+
+func GetMetadataFromFileReader(fileReader *file.Reader) (*Metadata, error) {
+	return GetMetadata(fileReader.MetaData().GetKeyValueMetadata())
 }

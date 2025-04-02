@@ -82,6 +82,18 @@ The `describe` command prints schema information and metadata about a GeoParquet
 gpq describe example.parquet
 ```
 
+### extract
+
+The `extract` command can be use to extract columns and/or rows from a local or remote GeoParquet file.
+
+```
+gpq extract input.parquet output.parquet --bbox=xmin,ymin,xmax,ymax --drop-cols=col1,col2
+```
+
+Instead of negatively selecting columns by specifying which ones to drop (`--drop-cols`), you can alternatively use the `--keep-only-cols` argument to explicitely select those columns that you wish to keep in the data set.
+
+The `--bbox` argument allows you to extract features whose bounding box intersects with the provided bbox. Note that this doesn't support exact geometry filtering and will only operate on bounding boxes of full feature geometries. It is thus recommended to use the `--bbox` argument for preliminary filtering only. The algorithm will attempt to use an existing bounding box column in the file. If bounding box information is not available, the bounding boxes will be computed on the fly. If the GeoParquet file is spatially partitioned using row groups, the algorithm will use row group statistics to speed up the filtering process.
+
 ## Limitations
 
  * Non-geographic CRS information is not preserved when converting GeoParquet to GeoJSON.
