@@ -169,7 +169,7 @@ func (v *Validator) Report(ctx context.Context, file *file.Reader) (*Report, err
 	}
 
 	// run all the data scanning rules
-	recordReader, rrErr := geoparquet.NewRecordReader(&geoparquet.ReaderConfig{
+	recordReader, rrErr := geoparquet.NewRecordReaderFromConfig(&geoparquet.ReaderConfig{
 		File:    file,
 		Context: ctx,
 	})
