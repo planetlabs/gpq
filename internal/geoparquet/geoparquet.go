@@ -244,6 +244,8 @@ func GetBboxColumn(schema *schema.Schema, geoMetadata *Metadata) *BboxColumn {
 	bboxCol := &BboxColumn{}
 	// try standard name first
 	bboxCol.Name = DefaultBboxColumn
+
+	// NB: we can't do schema.ColumnIndexByName() in this case as it won't give the expected result for nested types like structs
 	bboxCol.Index = schema.Root().FieldIndexByName(DefaultBboxColumn)
 
 	// if no match, check covering metadata
@@ -256,7 +258,7 @@ func GetBboxColumn(schema *schema.Schema, geoMetadata *Metadata) *BboxColumn {
 		}
 	}
 
-	bboxCol.BaseColumn = schema.ColumnIndexByName(geoMetadata.PrimaryColumn)
+	bboxCol.BaseColumn = schema.Root().FieldIndexByName(geoMetadata.PrimaryColumn)
 	bboxCol.BboxColumnFieldNames = *GetBboxColumnFieldNames(geoMetadata)
 	return bboxCol
 }
