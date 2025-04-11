@@ -39,7 +39,7 @@ func NewFeatureWriter(config *WriterConfig) (*FeatureWriter, error) {
 
 	geoMetadata := config.Metadata
 	if geoMetadata == nil {
-		geoMetadata = DefaultMetadata()
+		geoMetadata = DefaultMetadata(config.WriteCoveringMetadata)
 	}
 
 	if config.ArrowSchema == nil {
@@ -98,6 +98,23 @@ func (w *FeatureWriter) append(feature *geo.Feature, field arrow.Field, builder 
 	name := field.Name
 	if w.geoMetadata.Columns[name] != nil {
 		return w.appendGeometry(feature, field, builder)
+	}
+
+	if name == DefaultBboxColumn || name == GetBboxColumnNameFromMetadata(w.geoMetadata) {
+		if feature.Bbox == nil {
+			if !field.Nullable {
+				return fmt.Errorf("field %q is required, but the property is missing in the feature", name)
+			}
+			builder.AppendNull()
+			return nil
+		}
+		bboxMap := map[string]any{
+			"xmin": feature.Bbox.Min.X(),
+			"ymin": feature.Bbox.Min.Y(),
+			"xmax": feature.Bbox.Max.X(),
+			"ymax": feature.Bbox.Max.Y(),
+		}
+		return w.appendValue(name, bboxMap, builder)
 	}
 
 	value, ok := feature.Properties[name]

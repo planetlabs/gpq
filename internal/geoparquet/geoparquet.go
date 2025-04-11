@@ -189,3 +189,76 @@ func FromParquet(input parquet.ReaderAtSeeker, output io.Writer, convertOptions 
 
 	return pqutil.TransformByColumn(config)
 }
+
+type BboxColumnFieldNames struct {
+	Xmin string
+	Ymin string
+	Xmax string
+	Ymax string
+}
+
+func GetBboxColumnFieldNames(metadata *Metadata) *BboxColumnFieldNames {
+	// infer bbox struct field names
+	fieldNames := &BboxColumnFieldNames{}
+
+	if metadata.Columns[metadata.PrimaryColumn].Covering != nil {
+		fieldNames.Xmin = metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Xmin[1]
+		fieldNames.Ymin = metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Ymin[1]
+		fieldNames.Xmax = metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Xmax[1]
+		fieldNames.Ymax = metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Ymax[1]
+	} else {
+		// fallback to standard names
+		fieldNames.Xmin = "xmin"
+		fieldNames.Ymin = "ymin"
+		fieldNames.Xmax = "xmax"
+		fieldNames.Ymax = "ymax"
+	}
+
+	return fieldNames
+}
+
+type BboxColumn struct {
+	Index              int
+	Name               string
+	BaseColumn         int // the primary geometry column the bbox column references
+	BaseColumnEncoding string
+	BboxColumnFieldNames
+}
+
+// Get Bbox column name from covering metadata only. For most cases, use the
+// more robust function GetBboxColumn that infers the name even if metadata
+// is not present.
+func GetBboxColumnNameFromMetadata(geoMetadata *Metadata) string {
+	if geoMetadata.Columns[geoMetadata.PrimaryColumn].Covering != nil && len(geoMetadata.Columns[geoMetadata.PrimaryColumn].Covering.Bbox.Xmin) == 2 {
+		return geoMetadata.Columns[geoMetadata.PrimaryColumn].Covering.Bbox.Xmin[0]
+	}
+	return ""
+}
+
+// Returns a *BboxColumn struct that contains index, name and other data
+// that describe the bounding box column contained in the schema.
+// If there is no match for the standard name "bbox" in the schema,
+// the covering metadata is consulted.
+// An index field value of -1 (alongside an empty name field) means no bbox column found.
+func GetBboxColumn(schema *schema.Schema, geoMetadata *Metadata) *BboxColumn {
+	bboxCol := &BboxColumn{}
+	// try standard name first
+	bboxCol.Name = DefaultBboxColumn
+
+	// NB: we can't do schema.ColumnIndexByName() in this case as it won't give the expected result for nested types like structs
+	bboxCol.Index = schema.Root().FieldIndexByName(DefaultBboxColumn)
+
+	// if no match, check covering metadata
+	if bboxCol.Index == -1 {
+		if geoMetadata.Columns[geoMetadata.PrimaryColumn].Covering != nil && len(geoMetadata.Columns[geoMetadata.PrimaryColumn].Covering.Bbox.Xmin) == 2 {
+			bboxCol.Name = geoMetadata.Columns[geoMetadata.PrimaryColumn].Covering.Bbox.Xmin[0]
+			bboxCol.Index = schema.Root().FieldIndexByName(bboxCol.Name)
+		} else {
+			bboxCol.Name = ""
+		}
+	}
+
+	bboxCol.BaseColumn = schema.Root().FieldIndexByName(geoMetadata.PrimaryColumn)
+	bboxCol.BboxColumnFieldNames = *GetBboxColumnFieldNames(geoMetadata)
+	return bboxCol
+}

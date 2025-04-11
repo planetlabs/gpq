@@ -17,6 +17,7 @@ package geojson_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -83,6 +84,12 @@ func TestToParquet(t *testing.T) {
 	metadata, geoErr := geoparquet.GetMetadata(fileReader.MetaData().KeyValueMetadata())
 	require.NoError(t, geoErr)
 
+	assert.Equal(t, "geometry", metadata.PrimaryColumn)
+	// check if covering metadata has been written
+	metadata, err := geoparquet.GetMetadata(fileReader.MetaData().KeyValueMetadata())
+	require.NoError(t, err)
+
+	assert.Nil(t, metadata.Columns[metadata.PrimaryColumn].Covering)
 	geometryTypes := metadata.Columns[metadata.PrimaryColumn].GetGeometryTypes()
 	assert.Len(t, geometryTypes, 2)
 	assert.Contains(t, geometryTypes, "MultiPolygon")
@@ -273,6 +280,78 @@ func TestToParquetNumberId(t *testing.T) {
 	assert.Equal(t, []string{"Point"}, geometryTypes)
 }
 
+func TestToParquetExistingBbox(t *testing.T) {
+	geojsonFile, openErr := os.Open("testdata/bbox.geojson")
+	require.NoError(t, openErr)
+
+	parquetBuffer := &bytes.Buffer{}
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, nil)
+	assert.NoError(t, toParquetErr)
+
+	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
+	defer fileReader.Close()
+
+	// check if covering metadata has been written
+	metadata, err := geoparquet.GetMetadata(fileReader.MetaData().KeyValueMetadata())
+	require.NoError(t, err)
+
+	require.NotNil(t, metadata.Columns[metadata.PrimaryColumn].Covering)
+	assert.Equal(t, []string{"bbox", "xmin"}, metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Xmin)
+	assert.Equal(t, []string{"bbox", "ymin"}, metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Ymin)
+	assert.Equal(t, []string{"bbox", "xmax"}, metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Xmax)
+	assert.Equal(t, []string{"bbox", "ymax"}, metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Ymax)
+
+	assert.NotEqual(t, -1, fileReader.MetaData().Schema.ColumnIndexByName("bbox.xmin"))
+	assert.Equal(t, int64(5), fileReader.NumRows())
+
+	geojsonBuffer := &bytes.Buffer{}
+	fromParquetErr := geojson.FromParquet(parquetInput, geojsonBuffer)
+	require.NoError(t, fromParquetErr)
+
+	expected, err := os.ReadFile("testdata/bbox.geojson")
+	require.NoError(t, err)
+
+	assert.JSONEq(t, string(expected), geojsonBuffer.String())
+}
+
+func TestToParquetAddBbox(t *testing.T) {
+	geojsonFile, openErr := os.Open("testdata/example.geojson")
+	require.NoError(t, openErr)
+
+	parquetBuffer := &bytes.Buffer{}
+	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, &geojson.ConvertOptions{AddBbox: true})
+	assert.NoError(t, toParquetErr)
+
+	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
+	fileReader, fileErr := file.NewParquetReader(parquetInput)
+	require.NoError(t, fileErr)
+	defer fileReader.Close()
+
+	assert.NotEqual(t, -1, fileReader.MetaData().Schema.ColumnIndexByName("bbox.xmin"))
+	assert.Equal(t, int64(5), fileReader.NumRows())
+
+	// check if covering metadata has been written
+	metadata, err := geoparquet.GetMetadata(fileReader.MetaData().KeyValueMetadata())
+	require.NoError(t, err)
+
+	require.NotNil(t, metadata.Columns[metadata.PrimaryColumn].Covering)
+	assert.Equal(t, []string{"bbox", "xmin"}, metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Xmin)
+	assert.Equal(t, []string{"bbox", "ymin"}, metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Ymin)
+	assert.Equal(t, []string{"bbox", "xmax"}, metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Xmax)
+	assert.Equal(t, []string{"bbox", "ymax"}, metadata.Columns[metadata.PrimaryColumn].Covering.Bbox.Ymax)
+
+	geojsonBuffer := &bytes.Buffer{}
+	fromParquetErr := geojson.FromParquet(parquetInput, geojsonBuffer)
+	require.NoError(t, fromParquetErr)
+
+	expected, err := os.ReadFile("testdata/bbox.geojson")
+	require.NoError(t, err)
+
+	assert.JSONEq(t, string(expected), geojsonBuffer.String())
+}
+
 func TestToParquetBooleanId(t *testing.T) {
 	geojsonFile, openErr := os.Open("testdata/boolean-id.geojson")
 	require.NoError(t, openErr)
@@ -457,7 +536,7 @@ func TestRoundTripSparseProperties(t *testing.T) {
 	assert.JSONEq(t, string(inputData), jsonBuffer.String())
 }
 
-func makeGeoParquetReader[T any](rows []T, metadata *geoparquet.Metadata) (*bytes.Reader, error) {
+func makeGeoParquetReader[T any](rows []T, metadata *geoparquet.Metadata, writeCoveringMetadata bool) (*bytes.Reader, error) {
 	data, err := json.Marshal(rows)
 	if err != nil {
 		return nil, err
@@ -465,19 +544,20 @@ func makeGeoParquetReader[T any](rows []T, metadata *geoparquet.Metadata) (*byte
 
 	parquetSchema, err := schema.NewSchemaFromStruct(rows[0])
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot create parquet schema from struct: %w", err)
 	}
 
 	arrowSchema, err := pqarrow.FromParquet(parquetSchema, nil, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot create arrow schema from struct: %w", err)
 	}
 
 	output := &bytes.Buffer{}
 	recordWriter, err := geoparquet.NewRecordWriter(&geoparquet.WriterConfig{
-		Writer:      output,
-		Metadata:    metadata,
-		ArrowSchema: arrowSchema,
+		Writer:                output,
+		Metadata:              metadata,
+		ArrowSchema:           arrowSchema,
+		WriteCoveringMetadata: writeCoveringMetadata,
 	})
 	if err != nil {
 		return nil, err
@@ -485,7 +565,7 @@ func makeGeoParquetReader[T any](rows []T, metadata *geoparquet.Metadata) (*byte
 
 	rec, _, err := array.RecordFromJSON(memory.DefaultAllocator, arrowSchema, strings.NewReader(string(data)))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot create record from json: %w", err)
 	}
 
 	if err := recordWriter.Write(rec); err != nil {
@@ -515,10 +595,10 @@ func TestWKT(t *testing.T) {
 		},
 	}
 
-	metadata := geoparquet.DefaultMetadata()
+	metadata := geoparquet.DefaultMetadata(false)
 	metadata.Columns[metadata.PrimaryColumn].Encoding = geo.EncodingWKT
 
-	reader, readerErr := makeGeoParquetReader(rows, metadata)
+	reader, readerErr := makeGeoParquetReader(rows, metadata, false)
 	require.NoError(t, readerErr)
 
 	output := &bytes.Buffer{}
@@ -567,10 +647,10 @@ func TestWKTNoEncoding(t *testing.T) {
 		},
 	}
 
-	metadata := geoparquet.DefaultMetadata()
+	metadata := geoparquet.DefaultMetadata(false)
 	metadata.Columns[metadata.PrimaryColumn].Encoding = ""
 
-	reader, readerErr := makeGeoParquetReader(rows, metadata)
+	reader, readerErr := makeGeoParquetReader(rows, metadata, false)
 	require.NoError(t, readerErr)
 
 	output := &bytes.Buffer{}
@@ -612,9 +692,9 @@ func TestWKB(t *testing.T) {
 		},
 	}
 
-	metadata := geoparquet.DefaultMetadata()
+	metadata := geoparquet.DefaultMetadata(false)
 
-	reader, readerErr := makeGeoParquetReader(rows, metadata)
+	reader, readerErr := makeGeoParquetReader(rows, metadata, false)
 	require.NoError(t, readerErr)
 
 	output := &bytes.Buffer{}
@@ -656,10 +736,10 @@ func TestWKBNoEncoding(t *testing.T) {
 		},
 	}
 
-	metadata := geoparquet.DefaultMetadata()
+	metadata := geoparquet.DefaultMetadata(false)
 	metadata.Columns[metadata.PrimaryColumn].Encoding = ""
 
-	reader, readerErr := makeGeoParquetReader(rows, metadata)
+	reader, readerErr := makeGeoParquetReader(rows, metadata, false)
 	require.NoError(t, readerErr)
 
 	output := &bytes.Buffer{}
@@ -773,4 +853,49 @@ func TestCodecInvalid(t *testing.T) {
 	convertOptions := &geojson.ConvertOptions{Compression: "invalid"}
 	toParquetErr := geojson.ToParquet(geojsonFile, parquetBuffer, convertOptions)
 	assert.EqualError(t, toParquetErr, "invalid compression codec invalid")
+}
+
+func TestCoveringMetadata(t *testing.T) {
+	type Row struct {
+		Name     string   `parquet:"name=name, logical=String" json:"name"`
+		Geometry string   `parquet:"name=geometry, logical=String" json:"geometry"`
+		Bbox     geo.Bbox `parquet:"name=bbox" json:"bbox"`
+	}
+
+	rows := []*Row{
+		{
+			Name:     "test-point",
+			Geometry: "POINT (1 2)",
+			Bbox:     geo.Bbox{Xmin: 1, Ymin: 2, Xmax: 1, Ymax: 2},
+		},
+	}
+
+	metadata := geoparquet.DefaultMetadata(true)
+	metadata.Columns[metadata.PrimaryColumn].Encoding = geo.EncodingWKT
+
+	reader, readerErr := makeGeoParquetReader(rows, metadata, true)
+	require.NoError(t, readerErr)
+
+	output := &bytes.Buffer{}
+	convertErr := geojson.FromParquet(reader, output)
+	require.NoError(t, convertErr)
+
+	expected := `{
+		"type": "FeatureCollection",
+		"features": [
+			{
+				"type": "Feature",
+				"bbox": [1, 2, 1, 2],
+				"properties": {
+					"name": "test-point"
+				},
+				"geometry": {
+					"type": "Point",
+					"coordinates": [1, 2]
+				}
+			}
+		]
+	}`
+
+	assert.JSONEq(t, expected, output.String())
 }

@@ -120,6 +120,49 @@ func TestFeatureReaderNewLineDelimited(t *testing.T) {
 	assert.Equal(t, float64(326625791), usa.Properties["pop_est"])
 }
 
+func TestFeatureReaderBbox(t *testing.T) {
+	file, openErr := os.Open("testdata/bbox.geojson")
+	require.NoError(t, openErr)
+
+	reader := geojson.NewFeatureReader(file)
+
+	features := []*geo.Feature{}
+	for {
+		feature, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		features = append(features, feature)
+	}
+	require.Len(t, features, 5)
+
+	feature := features[0]
+	require.NotNil(t, feature.Geometry)
+	assert.Equal(t, "MultiPolygon", feature.Geometry.GeoJSONType())
+	assert.Equal(t, map[string]any{
+		"continent":  "Oceania",
+		"gdp_md_est": 8374.0,
+		"iso_a3":     "FJI",
+		"name":       "Fiji",
+		"pop_est":    920938.0}, feature.Properties)
+	assert.Equal(t, -180.0, feature.Bbox.Min.X())
+	assert.Equal(t, -18.28799, feature.Bbox.Min.Y())
+	assert.Equal(t, 180.0, feature.Bbox.Max.X())
+	assert.Equal(t, -16.020882256741224, feature.Bbox.Max.Y())
+}
+
+func TestFeatureReaderBboxInvalid(t *testing.T) {
+	file, openErr := os.Open("testdata/bad-bbox.geojson")
+	require.NoError(t, openErr)
+
+	reader := geojson.NewFeatureReader(file)
+
+	feature, err := reader.Read()
+	require.ErrorContains(t, err, "invalid bbox")
+	require.Nil(t, feature)
+}
+
 func TestFeatureReaderBadNewLineDelimited(t *testing.T) {
 	file, openErr := os.Open("testdata/bad-new-line-delimited.ndgeojson")
 	require.NoError(t, openErr)
