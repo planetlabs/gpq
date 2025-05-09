@@ -98,7 +98,7 @@ func (v *Validator) Validate(ctx context.Context, input parquet.ReaderAtSeeker, 
 	if readerErr != nil {
 		return nil, fmt.Errorf("failed to create parquet reader from %q: %w", name, readerErr)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	return v.Report(ctx, reader)
 }
@@ -176,7 +176,7 @@ func (v *Validator) Report(ctx context.Context, file *file.Reader) (*Report, err
 	if rrErr != nil {
 		return nil, rrErr
 	}
-	defer recordReader.Close()
+	defer func() { _ = recordReader.Close() }()
 
 	encodedGeometryRules := []*ColumnValueRule[any]{}
 	encodedGeometryChecks := []*Check{}

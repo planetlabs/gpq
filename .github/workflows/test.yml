@@ -18,8 +18,7 @@ jobs:
           go-version: '1.24'
       - uses: golangci/golangci-lint-action@v8
         with:
-          version: v1.64.6
-          args: "--timeout=5m --out-${NO_FUTURE}format colored-line-number"
+          version: v2.1.6
 
   test:
     runs-on: ubuntu-latest

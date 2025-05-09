@@ -37,7 +37,7 @@ func (s *Suite) TestConvertGeoJSONToGeoParquetStdout() {
 
 	fileReader, err := file.NewParquetReader(bytes.NewReader(data))
 	s.Require().NoError(err)
-	defer fileReader.Close()
+	defer func() { _ = fileReader.Close() }()
 
 	s.Equal(int64(5), fileReader.NumRows())
 }
@@ -78,7 +78,7 @@ func (s *Suite) TestConvertGeoJSONStdinToGeoParquetStdout() {
 
 	fileReader, err := file.NewParquetReader(bytes.NewReader(data))
 	s.Require().NoError(err)
-	defer fileReader.Close()
+	defer func() { _ = fileReader.Close() }()
 
 	s.Equal(int64(1), fileReader.NumRows())
 }

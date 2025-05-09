@@ -60,7 +60,7 @@ func (c *DescribeCmd) Run() error {
 	if fileErr != nil {
 		return fmt.Errorf("failed to read %q as parquet: %w", c.Input, fileErr)
 	}
-	defer fileReader.Close()
+	defer func() { _ = fileReader.Close() }()
 
 	if c.MetadataOnly {
 		value, err := geoparquet.GetMetadataValue(fileReader.MetaData().KeyValueMetadata())
@@ -294,9 +294,10 @@ func buildSchema(fileReader *file.Reader, name string, node schema.Node) *Descri
 	repetition := node.RepetitionType()
 	optional := false
 	repeated := false
-	if repetition == parquet.Repetitions.Optional {
+	switch repetition {
+	case parquet.Repetitions.Optional:
 		optional = true
-	} else if repetition == parquet.Repetitions.Repeated {
+	case parquet.Repetitions.Repeated:
 		repeated = true
 	}
 

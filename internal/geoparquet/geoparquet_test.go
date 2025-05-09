@@ -44,7 +44,7 @@ func newFileReader(filepath string) (*file.Reader, error) {
 func TestGetMetadataV040(t *testing.T) {
 	reader, readerErr := newFileReader("../testdata/cases/example-v0.4.0.parquet")
 	require.NoError(t, readerErr)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	metadata, metadataErr := geoparquet.GetMetadata(reader.MetaData().GetKeyValueMetadata())
 	require.NoError(t, metadataErr)
@@ -62,7 +62,7 @@ func TestGetMetadataV040(t *testing.T) {
 func TestGetMetadataV100Beta1(t *testing.T) {
 	reader, readerErr := newFileReader("../testdata/cases/example-v1.0.0-beta.1.parquet")
 	require.NoError(t, readerErr)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	metadata, metadataErr := geoparquet.GetMetadata(reader.MetaData().GetKeyValueMetadata())
 	require.NoError(t, metadataErr)
@@ -86,7 +86,7 @@ func TestGetMetadataV100Beta1(t *testing.T) {
 func TestGetMetadataV1(t *testing.T) {
 	reader, readerErr := newFileReader("../testdata/cases/example-v1.0.0.parquet")
 	require.NoError(t, readerErr)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	metadata, metadataErr := geoparquet.GetMetadata(reader.MetaData().GetKeyValueMetadata())
 	require.NoError(t, metadataErr)
@@ -242,7 +242,7 @@ func TestFromParquetWithoutMetadata(t *testing.T) {
 
 	reader, err := file.NewParquetReader(geoparquetInput)
 	require.NoError(t, err)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	metadata, err := geoparquet.GetMetadata(reader.MetaData().KeyValueMetadata())
 	require.NoError(t, err)
@@ -323,7 +323,7 @@ func TestFromParquetWithWKT(t *testing.T) {
 	geoparquetInput := bytes.NewReader(output.Bytes())
 	reader, err := file.NewParquetReader(geoparquetInput)
 	require.NoError(t, err)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	metadata, err := geoparquet.GetMetadata(reader.MetaData().KeyValueMetadata())
 	require.NoError(t, err)
@@ -372,7 +372,7 @@ func TestFromParquetWithAltPrimaryColumn(t *testing.T) {
 	geoparquetInput := bytes.NewReader(output.Bytes())
 	reader, err := file.NewParquetReader(geoparquetInput)
 	require.NoError(t, err)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	metadata, err := geoparquet.GetMetadata(reader.MetaData().KeyValueMetadata())
 	require.NoError(t, err)
@@ -411,7 +411,7 @@ func TestFromParquetWithAltPrimaryColumnWKT(t *testing.T) {
 	geoparquetInput := bytes.NewReader(output.Bytes())
 	reader, err := file.NewParquetReader(geoparquetInput)
 	require.NoError(t, err)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	metadata, err := geoparquet.GetMetadata(reader.MetaData().KeyValueMetadata())
 	require.NoError(t, err)
@@ -437,7 +437,7 @@ func TestRecordReading(t *testing.T) {
 	require.NoError(t, fileErr)
 	reader, readerErr := file.NewParquetReader(f)
 	require.NoError(t, readerErr)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	pqReader, pqErr := pqarrow.NewFileReader(reader, pqarrow.ArrowReadProperties{BatchSize: 10}, memory.DefaultAllocator)
 	require.NoError(t, pqErr)
@@ -464,7 +464,7 @@ func TestGetBboxColumnV100(t *testing.T) {
 	require.NoError(t, fileErr)
 	reader, readerErr := file.NewParquetReader(f)
 	require.NoError(t, readerErr)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	metadata, err := geoparquet.GetMetadata(reader.MetaData().KeyValueMetadata())
 	require.NoError(t, err)
@@ -475,10 +475,10 @@ func TestGetBboxColumnV100(t *testing.T) {
 	assert.Equal(t, "", bboxCol.Name)
 	assert.Equal(t, 0, bboxCol.BaseColumn)
 	assert.Equal(t, "", bboxCol.BaseColumnEncoding)
-	assert.Equal(t, "xmin", bboxCol.BboxColumnFieldNames.Xmin)
-	assert.Equal(t, "ymin", bboxCol.BboxColumnFieldNames.Ymin)
-	assert.Equal(t, "xmax", bboxCol.BboxColumnFieldNames.Xmax)
-	assert.Equal(t, "ymax", bboxCol.BboxColumnFieldNames.Ymax)
+	assert.Equal(t, "xmin", bboxCol.Xmin)
+	assert.Equal(t, "ymin", bboxCol.Ymin)
+	assert.Equal(t, "xmax", bboxCol.Xmax)
+	assert.Equal(t, "ymax", bboxCol.Ymax)
 }
 
 func TestGetBboxColumnV110(t *testing.T) {
@@ -486,7 +486,7 @@ func TestGetBboxColumnV110(t *testing.T) {
 	require.NoError(t, fileErr)
 	reader, readerErr := file.NewParquetReader(f)
 	require.NoError(t, readerErr)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	metadata, err := geoparquet.GetMetadata(reader.MetaData().KeyValueMetadata())
 	require.NoError(t, err)
@@ -497,10 +497,10 @@ func TestGetBboxColumnV110(t *testing.T) {
 	assert.Equal(t, "bbox", bboxCol.Name)
 	assert.Equal(t, 5, bboxCol.BaseColumn)
 	assert.Equal(t, "", bboxCol.BaseColumnEncoding)
-	assert.Equal(t, "xmin", bboxCol.BboxColumnFieldNames.Xmin)
-	assert.Equal(t, "ymin", bboxCol.BboxColumnFieldNames.Ymin)
-	assert.Equal(t, "xmax", bboxCol.BboxColumnFieldNames.Xmax)
-	assert.Equal(t, "ymax", bboxCol.BboxColumnFieldNames.Ymax)
+	assert.Equal(t, "xmin", bboxCol.Xmin)
+	assert.Equal(t, "ymin", bboxCol.Ymin)
+	assert.Equal(t, "xmax", bboxCol.Xmax)
+	assert.Equal(t, "ymax", bboxCol.Ymax)
 }
 
 func TestGetBboxColumnIdxV110NonStandardBboxCol(t *testing.T) {
@@ -508,7 +508,7 @@ func TestGetBboxColumnIdxV110NonStandardBboxCol(t *testing.T) {
 	require.NoError(t, fileErr)
 	reader, readerErr := file.NewParquetReader(f)
 	require.NoError(t, readerErr)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	metadata, err := geoparquet.GetMetadata(reader.MetaData().KeyValueMetadata())
 	require.NoError(t, err)
@@ -520,21 +520,21 @@ func TestGetBboxColumnIdxV110NonStandardBboxCol(t *testing.T) {
 	assert.Equal(t, "geometry_bbox", bboxCol.Name)
 	assert.Equal(t, 5, bboxCol.BaseColumn)
 	assert.Equal(t, "", bboxCol.BaseColumnEncoding)
-	assert.Equal(t, "xmin", bboxCol.BboxColumnFieldNames.Xmin)
-	assert.Equal(t, "ymin", bboxCol.BboxColumnFieldNames.Ymin)
-	assert.Equal(t, "xmax", bboxCol.BboxColumnFieldNames.Xmax)
-	assert.Equal(t, "ymax", bboxCol.BboxColumnFieldNames.Ymax)
+	assert.Equal(t, "xmin", bboxCol.Xmin)
+	assert.Equal(t, "ymin", bboxCol.Ymin)
+	assert.Equal(t, "xmax", bboxCol.Xmax)
+	assert.Equal(t, "ymax", bboxCol.Ymax)
 	assert.Equal(t, 6, reader.MetaData().Schema.Root().FieldIndexByName("geometry_bbox"))
 }
 
 func TestFilterRecordBatchByBboxV100(t *testing.T) {
 	fileReader, fileErr := os.Open("../testdata/cases/example-v1.0.0.parquet")
 	require.NoError(t, fileErr)
-	defer fileReader.Close()
+	defer func() { _ = fileReader.Close() }()
 
 	recordReader, err := geoparquet.NewRecordReaderFromConfig(&geoparquet.ReaderConfig{Reader: fileReader})
 	require.NoError(t, err)
-	defer recordReader.Close()
+	defer func() { _ = recordReader.Close() }()
 
 	record, readErr := recordReader.Read()
 	require.NoError(t, readErr)
@@ -566,11 +566,11 @@ func TestFilterRecordBatchByBboxV100(t *testing.T) {
 func TestFilterRecordBatchByBboxV110(t *testing.T) {
 	fileReader, fileErr := os.Open("../testdata/cases/example-v1.1.0.parquet")
 	require.NoError(t, fileErr)
-	defer fileReader.Close()
+	defer func() { _ = fileReader.Close() }()
 
 	recordReader, err := geoparquet.NewRecordReaderFromConfig(&geoparquet.ReaderConfig{Reader: fileReader})
 	require.NoError(t, err)
-	defer recordReader.Close()
+	defer func() { _ = recordReader.Close() }()
 
 	record, readErr := recordReader.Read()
 	require.NoError(t, readErr)
@@ -603,11 +603,11 @@ func TestFilterRecordBatchByBboxV110(t *testing.T) {
 func TestFilterRecordBatchByBboxV110NonStandardBboxCol(t *testing.T) {
 	fileReader, fileErr := os.Open("../testdata/cases/example-v1.1.0-covering.parquet")
 	require.NoError(t, fileErr)
-	defer fileReader.Close()
+	defer func() { _ = fileReader.Close() }()
 
 	recordReader, err := geoparquet.NewRecordReaderFromConfig(&geoparquet.ReaderConfig{Reader: fileReader})
 	require.NoError(t, err)
-	defer recordReader.Close()
+	defer func() { _ = recordReader.Close() }()
 
 	record, readErr := recordReader.Read()
 	require.NoError(t, readErr)
