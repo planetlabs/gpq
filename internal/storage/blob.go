@@ -89,7 +89,7 @@ func (r *BlobReader) readFull(data []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer rangeReader.Close()
+	defer func() { _ = rangeReader.Close() }()
 
 	total := 0
 	for {

@@ -118,7 +118,7 @@ func TestToParquetRowGroupLength3(t *testing.T) {
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
 	fileReader, fileErr := file.NewParquetReader(parquetInput)
 	require.NoError(t, fileErr)
-	defer fileReader.Close()
+	defer func() { _ = fileReader.Close() }()
 
 	assert.Equal(t, 4, fileReader.NumRowGroups())
 }
@@ -136,7 +136,7 @@ func TestToParquetRowGroupLength5(t *testing.T) {
 	parquetInput := bytes.NewReader(parquetBuffer.Bytes())
 	fileReader, fileErr := file.NewParquetReader(parquetInput)
 	require.NoError(t, fileErr)
-	defer fileReader.Close()
+	defer func() { _ = fileReader.Close() }()
 
 	assert.Equal(t, 2, fileReader.NumRowGroups())
 }

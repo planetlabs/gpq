@@ -31,7 +31,7 @@ func TestHttpReaderReadAll(t *testing.T) {
 
 	reader, err := storage.NewHttpReader(url)
 	require.NoError(t, err)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	data, err := io.ReadAll(reader)
 	require.NoError(t, err)
@@ -45,7 +45,7 @@ func TestHttpReaderReadAt(t *testing.T) {
 
 	httpReader, err := storage.NewHttpReader(url)
 	require.NoError(t, err)
-	defer httpReader.Close()
+	defer func() { _ = httpReader.Close() }()
 
 	byteReader := bytes.NewReader(content)
 
@@ -109,7 +109,7 @@ func TestHttpReaderSeek(t *testing.T) {
 
 	httpReader, err := storage.NewHttpReader(url)
 	require.NoError(t, err)
-	defer httpReader.Close()
+	defer func() { _ = httpReader.Close() }()
 
 	byteReader := bytes.NewReader(content)
 

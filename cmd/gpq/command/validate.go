@@ -68,7 +68,7 @@ func (c *ValidateCmd) Run(ctx *kong.Context) error {
 	}
 
 	if !valid {
-		ctx.Kong.Exit(1)
+		ctx.Exit(1)
 	}
 	return nil
 }

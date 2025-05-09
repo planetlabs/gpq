@@ -32,7 +32,7 @@ func FromParquet(reader parquet.ReaderAtSeeker, writer io.Writer) error {
 	if rrErr != nil {
 		return rrErr
 	}
-	defer recordReader.Close()
+	defer func() { _ = recordReader.Close() }()
 
 	geoMetadata := recordReader.Metadata()
 

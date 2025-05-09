@@ -19,7 +19,7 @@ func (s *Suite) TestExtractDropCols() {
 
 	fileReader, err := file.NewParquetReader(bytes.NewReader(data))
 	s.Require().NoError(err)
-	defer fileReader.Close()
+	defer func() { _ = fileReader.Close() }()
 
 	s.Equal(int64(5), fileReader.NumRows())
 
@@ -30,7 +30,7 @@ func (s *Suite) TestExtractDropCols() {
 		Reader: bytes.NewReader(data),
 	})
 	s.Require().NoError(err)
-	defer recordReader.Close()
+	defer func() { _ = recordReader.Close() }()
 
 	record, readErr := recordReader.Read()
 	s.Require().NoError(readErr)
@@ -48,7 +48,7 @@ func (s *Suite) TestExtractKeepOnlyCols() {
 
 	fileReader, err := file.NewParquetReader(bytes.NewReader(data))
 	s.Require().NoError(err)
-	defer fileReader.Close()
+	defer func() { _ = fileReader.Close() }()
 
 	s.Equal(int64(5), fileReader.NumRows())
 
@@ -59,7 +59,7 @@ func (s *Suite) TestExtractKeepOnlyCols() {
 		Reader: bytes.NewReader(data),
 	})
 	s.Require().NoError(err)
-	defer recordReader.Close()
+	defer func() { _ = recordReader.Close() }()
 
 	record, readErr := recordReader.Read()
 	s.Require().NoError(readErr)
@@ -80,7 +80,7 @@ func (s *Suite) TestExtractBbox110() {
 		Reader: bytes.NewReader(data),
 	})
 	s.Require().NoError(err)
-	defer recordReader.Close()
+	defer func() { _ = recordReader.Close() }()
 
 	// we expect only one row, namely Tanzania
 	s.Require().Equal(int64(1), recordReader.NumRows())
@@ -109,7 +109,7 @@ func (s *Suite) TestExtractBbox110Partitioned() {
 		Reader: bytes.NewReader(data),
 	})
 	s.Require().NoError(err)
-	defer recordReader.Close()
+	defer func() { _ = recordReader.Close() }()
 
 	// we expect only one row, namely Tanzania
 	s.Require().Equal(int64(1), recordReader.NumRows())
@@ -137,7 +137,7 @@ func (s *Suite) TestExtractBbox100() {
 		Reader: bytes.NewReader(data),
 	})
 	s.Require().NoError(err)
-	defer recordReader.Close()
+	defer func() { _ = recordReader.Close() }()
 
 	// we expect only one row, namely Tanzania
 	s.Require().Equal(int64(1), recordReader.NumRows())
