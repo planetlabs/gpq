@@ -107,7 +107,7 @@ func TestTransformByColumn(t *testing.T) {
 
 			fileReader, err := file.NewParquetReader(bytes.NewReader(output.Bytes()))
 			require.NoError(t, err)
-			defer fileReader.Close()
+			defer func() { _ = fileReader.Close() }()
 
 			if c.config.Compression != nil {
 				expected := *c.config.Compression
@@ -256,7 +256,7 @@ func TestTransformByRowGroupLength(t *testing.T) {
 
 			fileReader, err := file.NewParquetReader(bytes.NewReader(output.Bytes()))
 			require.NoError(t, err)
-			defer fileReader.Close()
+			defer func() { _ = fileReader.Close() }()
 
 			var expectedNumRowGroups int
 			if config.RowGroupLength > 0 {
@@ -264,7 +264,7 @@ func TestTransformByRowGroupLength(t *testing.T) {
 			} else {
 				inputFileReader, err := file.NewParquetReader(input)
 				require.NoError(t, err)
-				defer inputFileReader.Close()
+				defer func() { _ = inputFileReader.Close() }()
 				expectedNumRowGroups = inputFileReader.NumRowGroups()
 			}
 			require.Equal(t, expectedNumRowGroups, fileReader.NumRowGroups())

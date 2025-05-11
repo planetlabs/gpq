@@ -70,7 +70,7 @@ func TransformByColumn(config *TransformConfig) error {
 	if fileReaderErr != nil {
 		return fileReaderErr
 	}
-	defer fileReader.Close()
+	defer func() { _ = fileReader.Close() }()
 
 	outputSchema := fileReader.MetaData().Schema
 	if config.TransformSchema != nil {

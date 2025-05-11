@@ -68,7 +68,7 @@ var fromParquet = js.FuncOf(func(this js.Value, args []js.Value) any {
 	if readerErr != nil {
 		return returnFromError(readerErr)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	metadata, metadataErr := geoparquet.GetMetadataValue(reader.MetaData().KeyValueMetadata())
 	if metadataErr != nil {

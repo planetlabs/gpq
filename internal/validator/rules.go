@@ -624,17 +624,18 @@ func GeometryBounds() Rule {
 			var x1 float64
 			var y0 float64
 			var y1 float64
-			if length == 4 {
+			switch length {
+			case 4:
 				x0 = bbox[0]
 				y0 = bbox[1]
 				x1 = bbox[2]
 				y1 = bbox[3]
-			} else if length == 6 {
+			case 6:
 				x0 = bbox[0]
 				y0 = bbox[1]
 				x1 = bbox[3]
 				y1 = bbox[4]
-			} else {
+			default:
 				return fmt.Errorf("invalid bbox length for column %q", name)
 			}
 

@@ -144,7 +144,7 @@ func (c *ConvertCmd) Run() error {
 		if createErr != nil {
 			return NewCommandError("failed to open %q for writing: %w", outputSource, createErr)
 		}
-		defer o.Close()
+		defer func() { _ = o.Close() }()
 		output = o
 	}
 

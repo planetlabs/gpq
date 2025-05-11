@@ -178,7 +178,7 @@ func (r *FeatureReader) Read() (*geo.Feature, error) {
 			}
 			_, stringId := valueToken.(string)
 			_, floatId := valueToken.(float64)
-			if !(stringId || floatId) {
+			if !stringId && !floatId {
 				return nil, fmt.Errorf("expected id to be a string or number, got: %v", valueToken)
 			}
 			feature.Id = valueToken

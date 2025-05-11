@@ -48,7 +48,7 @@ func (r *HttpReader) init() error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if !success(resp) {
 		return fmt.Errorf("unexpected response from %s: %d", r.url, resp.StatusCode)
 	}
@@ -95,10 +95,7 @@ func (r *HttpReader) ReadAt(data []byte, offset int64) (int, error) {
 	}
 
 	total := 0
-	for {
-		if total >= len(data) {
-			break
-		}
+	for total < len(data) {
 		n, err := r.Read(data[total:])
 		if err != nil {
 			return total + n, err
@@ -159,7 +156,7 @@ func (r *HttpReader) request(size int64) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if !success(resp) {
 		return fmt.Errorf("unexpected response from %s: %d", r.url, resp.StatusCode)
 	}

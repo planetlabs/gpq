@@ -44,7 +44,7 @@ func (c *ExtractCmd) Run() error {
 		if createErr != nil {
 			return NewCommandError("failed to open %q for writing: %w", outputSource, createErr)
 		}
-		defer o.Close()
+		defer func() { _ = o.Close() }()
 		output = o
 	}
 
@@ -138,7 +138,7 @@ func (c *ExtractCmd) Run() error {
 	if err != nil {
 		return NewCommandError("trouble creating geoparquet record reader: %w", err)
 	}
-	defer recordReader.Close()
+	defer func() { _ = recordReader.Close() }()
 
 	// prepare output writer
 	recordWriter, rwErr := geoparquet.NewRecordWriter(&geoparquet.WriterConfig{
@@ -149,7 +149,7 @@ func (c *ExtractCmd) Run() error {
 	if rwErr != nil {
 		return NewCommandError("trouble getting record writer: %w", rwErr)
 	}
-	defer recordWriter.Close()
+	defer func() { _ = recordWriter.Close() }()
 
 	// read and write records in loop
 	for {

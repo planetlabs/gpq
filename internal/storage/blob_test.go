@@ -50,7 +50,7 @@ func TestBlobReaderReadAt(t *testing.T) {
 
 	blobReader, err := storage.NewBlobReader(context.Background(), "file://"+name)
 	require.NoError(t, err)
-	defer blobReader.Close()
+	defer func() { _ = blobReader.Close() }()
 
 	byteReader := bytes.NewReader(content)
 
@@ -114,7 +114,7 @@ func TestBlobReaderSeek(t *testing.T) {
 
 	blobReader, err := storage.NewBlobReader(context.Background(), "file://"+name)
 	require.NoError(t, err)
-	defer blobReader.Close()
+	defer func() { _ = blobReader.Close() }()
 
 	byteReader := bytes.NewReader(content)
 
