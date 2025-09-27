@@ -9,7 +9,7 @@ require (
 	github.com/jedib0t/go-pretty/v6 v6.6.8
 	github.com/paulmach/orb v0.12.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	gocloud.dev v0.41.0
 	golang.org/x/term v0.35.0
 )
