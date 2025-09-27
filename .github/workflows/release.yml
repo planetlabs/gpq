@@ -18,7 +18,7 @@ jobs:
         with:
           fetch-depth: 0
       - run: git fetch --force --tags
-      - uses: actions/setup-go@v5.5.0
+      - uses: actions/setup-go@v6.0.0
         with:
           go-version: '1.24'
       - uses: docker/login-action@v3
