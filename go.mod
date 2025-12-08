@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/kong v1.12.1
 	github.com/apache/arrow/go/v16 v16.1.0
 	github.com/fatih/color v1.18.0
-	github.com/jedib0t/go-pretty/v6 v6.6.8
+	github.com/jedib0t/go-pretty/v6 v6.7.5
 	github.com/paulmach/orb v0.12.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/stretchr/testify v1.11.1
