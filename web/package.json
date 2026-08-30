@@ -1,34 +1,13 @@
 {
   "name": "gpq",
   "private": true,
+  "type": "module",
   "scripts": {
-    "test": "eslint main.js"
+    "test": "eslint main.js eslint.config.js"
   },
   "devDependencies": {
-    "eslint": "^8.40.0",
-    "eslint-config-planet": "^22.1.0",
-    "vite": "^7.0.6"
-  },
-  "eslintConfig": {
-    "extends": "planet",
-    "parserOptions": {
-      "ecmaVersion": "latest"
-    },
-    "ignorePatterns": [
-      "wasm_exec.js"
-    ],
-    "globals": {
-      "Go": "readonly"
-    },
-    "rules": {
-      "import/no-unresolved": [
-        "error",
-        {
-          "ignore": [
-            "^https?://"
-          ]
-        }
-      ]
-    }
+    "eslint": "^9.39.5",
+    "eslint-config-planet": "^23.3.0",
+    "vite": "^8.2.2"
   }
 }

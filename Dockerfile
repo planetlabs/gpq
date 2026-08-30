@@ -1,7 +1,8 @@
-FROM alpine:latest as certs
+FROM alpine:latest AS certs
 RUN apk --update add ca-certificates
 
 FROM scratch
+ARG TARGETPLATFORM
 COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY gpq /bin/gpq
+COPY $TARGETPLATFORM/gpq /bin/gpq
 ENTRYPOINT ["/bin/gpq"]
