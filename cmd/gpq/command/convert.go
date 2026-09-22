@@ -82,7 +82,7 @@ var geoJsonSuffixes = []string{
 }
 
 func getFormatType(resource string) FormatType {
-	if u, err := url.Parse(resource); err == nil {
+	if u, err := url.Parse(resource); err == nil && u.Scheme != "" {
 		resource = u.Path
 	}
 
